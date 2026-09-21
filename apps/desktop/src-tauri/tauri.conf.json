@@ -19,7 +19,7 @@
     "targets": ["app", "dmg", "nsis", "appimage", "deb", "rpm"],
     "createUpdaterArtifacts": false,
     "shortDescription": "Lightweight Markdown editor",
-    "category": "Office",
+    "category": "Productivity",
     "fileAssociations": [{ "ext": ["md", "markdown", "mdown", "mkd"], "mimeType": "text/markdown", "name": "Markdown document" }],
     "linux": { "deb": { "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"] }, "rpm": { "depends": ["webkit2gtk4.1", "gtk3"] } }
   }
