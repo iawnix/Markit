@@ -1,7 +1,7 @@
 {
   "name": "markit",
   "productName": "Markit",
-  "desktopName": "com.markit.app",
+  "desktopName": "com.markit.desktop",
   "version": "0.3.10",
   "private": true,
   "description": "Markit lightweight cross-platform Markdown editor",
@@ -82,7 +82,7 @@
     "vitest": "^4.0.0"
   },
   "build": {
-    "appId": "com.markit.app",
+    "appId": "com.markit.desktop",
     "productName": "Markit",
     "electronDist": "node_modules/electron/dist",
     "directories": {

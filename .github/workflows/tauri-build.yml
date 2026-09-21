@@ -29,7 +29,7 @@ jobs:
           - os: ubuntu-24.04
             bundles: appimage,deb,rpm
           - os: windows-latest
-            bundles: nsis,zip
+            bundles: nsis
           - os: macos-latest
             bundles: app,dmg
     runs-on: ${{ matrix.os }}
@@ -46,6 +46,14 @@ jobs:
       - run: npm ci
       - run: npx tsc -p apps/desktop/tsconfig.json --noEmit
       - run: npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles ${{ matrix.bundles }}
+      - name: Create Windows ZIP
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $zipDir = 'apps/desktop/src-tauri/target/release/bundle/zip'
+          New-Item -ItemType Directory -Force -Path $zipDir | Out-Null
+          Compress-Archive -Path 'apps/desktop/src-tauri/target/release/markit.exe' -DestinationPath "$zipDir/Markit-$version-Windows-x64.zip" -Force
       - name: Upload Linux bundles
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
