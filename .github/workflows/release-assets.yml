@@ -6,7 +6,7 @@ on:
       tag:
         description: Published release tag to simplify
         required: true
-        default: v0.3.5
+        default: v0.4.0
         type: string
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
           $release = gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the release.' }
           if ($release.tag_name -cne $env:RELEASE_TAG -or $release.draft -or $release.immutable) { throw 'Expected a mutable published release.' }
-          $keep = @("Markit-$version-Windows-x64-Setup.exe", "Markit-$version-Windows-x64.zip", "Markit-$version-Linux-x64.AppImage", "Markit-$version-Linux-x64.deb", "Markit-$version-Linux-x64.rpm", "Markit-$version-Linux-x64.tar.gz")
+          $keep = @("Markit-$version-Windows-x64-Setup.exe", "Markit-$version-Windows-x64.zip", "Markit-$version-macOS-x64.dmg", "Markit-$version-Linux-x64.AppImage", "Markit-$version-Linux-x64.deb", "Markit-$version-Linux-x64.rpm", "Markit-$version-Linux-x64.tar.gz")
           $remove = @("Markit-$version-Windows-Source.zip", 'README.zh-CN.md', 'SHA256SUMS.txt', 'THIRD_PARTY_LICENSES.txt', 'THIRD_PARTY_DEPENDENCIES.json', 'ThirdPartyNotices.md')
           $assets = @(gh api --paginate --slurp "repos/$env:GH_REPO/releases/$($release.id)/assets" | ConvertFrom-Json | ForEach-Object { $_ })
           if ($LASTEXITCODE -ne 0) { throw 'Could not list release assets.' }
@@ -62,4 +62,4 @@ jobs:
             $after = @($remaining | Where-Object name -CEQ $before.name)
             if ($after.Count -ne 1 -or $after[0].id -ne $before.id -or $after[0].size -ne $before.size -or $after[0].digest -ne $before.digest) { throw "Download changed: $($before.name)" }
           }
-          Write-Output 'Only the Windows and Linux packages remain; GitHub supplies Source code archives.'
+          Write-Output 'Only the Windows, macOS and Linux packages remain; GitHub supplies Source code archives.'
