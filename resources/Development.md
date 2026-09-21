@@ -4,24 +4,23 @@
 
 ## 环境准备
 
-- Windows x64 或 Linux x64。发布包应在目标平台原生构建。
-- Node.js 24 LTS 和 npm。Windows 发布工作流使用 Node.js `24.14.0`。
-- 首次安装需要访问 npm、Electron 下载服务和 electron-builder 的打包工具下载服务。
+- Windows、macOS 或 Linux x64。发布包应在目标平台原生构建。
+- Node.js 24 LTS、npm 和 Rust stable。Windows 发布工作流使用 Node.js 24。
+- Linux 需要 WebKitGTK 4.1、GTK3、librsvg 和 patchelf；Fedora、Manjaro 使用发行版对应的 WebKitGTK/GTK3 包。
 - Pandoc 仅用于扩展格式的导入、导出和相关集成验证。
 
-可下载 GitHub 按版本标签生成的 [Source code (zip)](https://github.com/chen-yu-hao/Markitdown/archive/refs/tags/v0.3.10.zip)，或克隆仓库：
+可下载 GitHub 按版本标签生成的 [Source code (zip)](https://github.com/iawnix/Markit/archive/refs/tags/v0.4.0.zip)，或克隆仓库：
 
 ```bash
-git clone https://github.com/chen-yu-hao/Markitdown.git
-cd Markitdown
+git clone https://github.com/iawnix/Markit.git
+cd Markit
 npm ci
-node node_modules/electron/install.js
-npm run dev
+npm run tauri:dev
 ```
 
-依赖以 `package-lock.json` 为准。Electron 44 需要显式安装运行时，因此每次 `npm ci` 后都应执行 `node node_modules/electron/install.js`；安装器按包内版本与摘要下载并校验，已安装时直接复用。
+依赖以 `package-lock.json` 和 `apps/desktop/src-tauri/Cargo.lock` 为准。Tauri 在构建时使用系统 WebView，不下载或打包 Chromium。
 
-`npm run dev` 构建主进程、启动 Vite 并打开 Electron。界面改动由 Vite 更新，主进程或 preload 改动后需重启开发命令。编辑器依赖 Electron 提供文件接口，不能仅通过普通浏览器使用完整功能。
+`npm run tauri:dev` 构建前端并启动 Tauri。浏览器前端检查使用 `npm run tauri:frontend`，不能通过普通浏览器获得完整的文件和窗口功能。
 
 ## 检查与测试
 
@@ -42,13 +41,13 @@ UI 验证使用独立数据目录，结果和截图写入 `test-results`。部�
 在 Ubuntu、Fedora、Manjaro 或其他 Linux x64 环境中执行：
 
 ```bash
-npm run pack:linux
+npm run tauri:build
 ```
 
-解包程序位于 `release/linux-unpacked/markit`。生成可分发产物：
+Tauri 的可执行文件位于 `apps/desktop/src-tauri/target/release/markit`。GitHub Actions 会在 Ubuntu 24.04 runner 中生成可分发产物：
 
 ```bash
-npm run dist:linux
+npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles appimage,deb,rpm
 ```
 
 输出包括：
@@ -78,59 +77,29 @@ chmod +x Markit-<版本>-Linux-x64.AppImage
 ./Markit-<版本>-Linux-x64.AppImage
 ```
 
-Linux 构建使用当前平台安装的原生 npm 依赖。不要在 Windows 上生成 Linux 的许可证清单或直接复用 Windows 的 `sharp` 原生包；切换平台后应重新执行 `npm ci` 和 `npm run notices`。AppImage 可在多数发行版直接运行；系统没有 FUSE 时可使用 `--appimage-extract-and-run`，或改用 tar.gz。发布 Linux 包时应在目标平台或兼容的 Linux x64 环境中构建，以保持原生模块和系统库兼容。
+Linux 构建使用系统 WebKitGTK，AppImage 不是自带 Chromium 的完全独立包。Ubuntu/Debian 的 DEB 和 Fedora/RHEL 的 RPM 会声明 WebKitGTK/GTK3 依赖；Manjaro/Arch 优先使用 AppImage 或 tar.gz，并确保系统安装对应 WebKitGTK。系统没有 FUSE 时可使用 `--appimage-extract-and-run`，或改用 tar.gz。发布 Linux 包时应在目标平台或兼容的 Linux x64 环境中构建，以保持系统库兼容。
 
-## Windows 打包
-
-```powershell
-npm run pack:win
-```
-
-生成 `release/win-unpacked`，可直接检查解包后的程序。生成完整发行包使用：
+## Windows 与 macOS 打包
 
 ```powershell
-npm run dist:win
-node scripts/verify-packaged.mjs
+npm run tauri:build
 ```
 
-`dist:win` 执行生产构建，生成 NSIS 安装程序和便携 ZIP，并整理源码、许可证与校验文件。`verify-packaged.mjs` 在隔离数据目录中启动 `release/win-unpacked/Markit.exe`，验证图片导入、HTML/PDF/PNG 导出及多档应用缩放。
-
-以下文件保存在本地 `release/` 目录，用于交付归档与校验：
-
-| 本地产物 | 内容 |
-| --- | --- |
-| `Markit-<版本>-Windows-x64-Setup.exe` | 未签名 NSIS 安装程序 |
-| `Markit-<版本>-Windows-x64.zip` | 含 `portable.json` 的便携程序 |
-| `Markit-<版本>-Windows-Source.zip` | 源码、测试、脚本、锁文件、文档和 macOS 对照资料 |
-| `README.zh-CN.md` | 中文使用与构建说明入口 |
-| `THIRD_PARTY_LICENSES.txt` | 运行依赖许可证文本及补充材料 |
-| `THIRD_PARTY_DEPENDENCIES.json` | 依赖版本、许可证声明和来源记录 |
-| `ThirdPartyNotices.md` | 第三方与素材来源说明 |
-| `SHA256SUMS.txt` | 以上七个文件的 SHA-256 校验值 |
-
-`prebuild` 自动收集依赖许可证。`afterPack` 为解包程序添加便携标记，NSIS 安装时删除该标记，使安装版使用用户应用数据目录。
-
-源码归档排除 `node_modules`、构建产物、缓存和用户数据。便携 ZIP 会进行完整性与版本标记检查。需要单独检查或重新整理发布文件时，可运行：
+Tauri 的 Windows 可执行文件位于 `apps/desktop/src-tauri/target/release/markit.exe`。生成 NSIS 安装程序使用：
 
 ```powershell
-npm run notices
-node scripts/release.mjs --check --platform=windows
-node scripts/release.mjs --platform=windows
+npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles nsis
 ```
 
-`--check` 只检查源码输入和工具解析，不生成归档。不带参数时要求安装程序与便携 ZIP 已存在，会重新生成源码包、说明副本与校验文件。
+macOS 使用同一命令并指定 `--bundles app,dmg` 生成 `.app` 和 `.dmg`。正式发布包由 GitHub Actions 在各平台原生 runner 上生成，Windows ZIP 只包含 `Markit.exe` 便携可执行文件。
+
+本地构建产物保存在 `apps/desktop/src-tauri/target/release/bundle`。正式 Release 只上传安装包和便携包，GitHub 会自动生成源码归档；依赖许可证与第三方说明保留在源码的 `resources` 目录中。
 
 ## GitHub 发布
 
-仓库的 [Release 工作流](https://github.com/chen-yu-hao/Markitdown/blob/main/.github/workflows/release.yml)支持推送 `v*` 标签触发，也支持手动指定已有标签。标签必须与 `package.json` 中的版本一致。工作流会先构建 Windows 安装包，再在 Ubuntu x64 环境构建并上传 AppImage、DEB、RPM 和 tar.gz Linux 产物。
+仓库的 [Release 工作流](https://github.com/iawnix/Markit/blob/main/.github/workflows/release.yml)支持推送 `v*.*.*` 标签触发，也支持手动指定已有标签。标签必须与 `package.json` 中的版本一致。工作流在 Windows、macOS 和 Ubuntu x64 runner 上分别构建，再集中上传 Windows 安装程序与 ZIP、macOS DMG、Linux AppImage/DEB/RPM/tar.gz。
 
-工作流检出指定标签，安装锁定依赖与 Electron，完成测试、构建、打包及实际程序验证后，上传 Windows 安装包、便携 ZIP 以及四种 Linux 产物。核对附件后，版本公开为最新版本；已公开的同名版本会被安全地更新。
-
-发布页的 Source code（zip / tar.gz）由 GitHub 按标签自动生成。许可证、依赖清单与第三方说明保留在程序可执行文件旁和源码的 `resources` 目录中，不再单独上传为 Release 附件。`scripts/release.mjs` 仍生成上表中的全部本地产物；其中自建源码 ZIP、说明副本和 `SHA256SUMS.txt` 留在本地 `release/` 目录，用于归档与校验。
-
-Windows 检出时必须保留 `resources/native-licenses` 的原始字节，许可证来源校验会核对 SHA-256。仓库使用 `.gitattributes` 保护这些文件；工作流也在检出前关闭自动换行转换，以支持较早标签。不要通过修改预期摘要来绕过来源校验。
-
-工作流将 `TEMP` 和 `TMP` 规范化为长路径，避免 Windows 的 `RUNNER~1` 短路径影响涉及路径比较的测试。
+Linux AppImage 依赖宿主机 WebKitGTK/GTK3；DEB 和 RPM 会声明对应运行时依赖。工作流会检查每个文件存在且非空，并在 Release 页面上传前再次核对文件名。
 
 ## 运行与排错
 
@@ -140,7 +109,7 @@ Windows 检出时必须保留 `resources/native-licenses` 的原始字节，许�
 .\Markit.exe "C:\文稿\研究笔记.md"
 ```
 
-Windows 安装版数据通常位于 `%APPDATA%\Markit`；Linux 通常位于 `~/.config/Markit`，或 `XDG_CONFIG_HOME` 指定的位置；Windows 便携版位于程序旁的 `data`。`MARKEDOWN_DATA_DIR` 可为开发或验证指定独立目录，恢复记录可能包含完整未保存文稿。
+Windows 安装版和 ZIP 数据通常位于 `%APPDATA%\Markit`；Linux 通常位于 `~/.config/Markit`，或 `XDG_CONFIG_HOME` 指定的位置。恢复记录可能包含完整未保存文稿。
 
 工作区扫描使用系统 Windows PowerShell 读取隐藏与重解析点属性。受权限限制的子目录会跳过；PowerShell 被系统策略禁用时会报告扫描失败。搜索跳过符号链接和目录联接，避免循环遍历。
 

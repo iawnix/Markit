@@ -52,8 +52,11 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           $zipDir = 'apps/desktop/src-tauri/target/release/bundle/zip'
+          $portableDir = Join-Path $env:RUNNER_TEMP 'Markit-portable'
           New-Item -ItemType Directory -Force -Path $zipDir | Out-Null
-          Compress-Archive -Path 'apps/desktop/src-tauri/target/release/markit.exe' -DestinationPath "$zipDir/Markit-$version-Windows-x64.zip" -Force
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item -LiteralPath 'apps/desktop/src-tauri/target/release/markit.exe' -Destination (Join-Path $portableDir 'Markit.exe') -Force
+          Compress-Archive -LiteralPath (Join-Path $portableDir 'Markit.exe') -DestinationPath "$zipDir/Markit-$version-Windows-x64.zip" -Force
       - name: Upload Linux bundles
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4

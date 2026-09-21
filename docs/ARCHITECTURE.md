@@ -1,8 +1,9 @@
 # Markit Architecture
 
-Markit is being migrated from Electron to Tauri 2. The new desktop entrypoint
-lives in `apps/desktop`; the existing Electron entrypoint remains available
-until the Tauri build reaches feature parity.
+Markit uses Tauri 2 as its desktop entrypoint. React and TypeScript live in
+`apps/desktop`, while Rust owns privileged and platform-specific operations.
+The previous Electron entrypoint remains in the repository only as a migration
+reference; new desktop features target Tauri.
 
 ## Runtime boundary
 

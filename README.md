@@ -1,30 +1,31 @@
 # Markit
 
-面向日常记录与论文写作的 Windows 与 Linux Markdown 编辑器。
+面向日常记录与论文写作的 Windows、macOS 与 Linux Markdown 编辑器。
 
-Markit 将即时排版、公式编号、Zotero 文献引用和多格式导出放在同一个写作环境中。文稿以本地 Markdown 文件保存，可随时切换到源码模式继续编辑。
+Markit 将即时排版、公式编号和多格式导出放在同一个写作环境中。文稿以本地 Markdown 文件保存，可随时切换到源码模式继续编辑。文献管理和其他重型能力作为可选插件，不会在核心启动时加载。
 
-**[下载最新版](https://github.com/chen-yu-hao/Markitdown/releases/latest)** · [学术写作指南](resources/AcademicWriting.md) · [构建说明](resources/Development.md) · [反馈问题](https://github.com/chen-yu-hao/Markitdown/issues)
+**[下载最新版](https://github.com/iawnix/Markit/releases/latest)** · [学术写作指南](resources/AcademicWriting.md) · [构建说明](resources/Development.md) · [反馈问题](https://github.com/iawnix/Markit/issues)
 
 ![Markit 编辑界面：研究笔记、公式编号与大纲](resources/images/editor.png)
 
 ## 下载与安装
 
-当前发布版本：**0.3.10**，提供 **Windows 10 22H2 / Windows 11 x64** 安装版和便携版。Linux x64 支持 AppImage、DEB、RPM 和 tar.gz：Ubuntu/Debian 使用 DEB，Fedora/RHEL 使用 RPM，Manjaro/Arch 使用 AppImage 或 tar.gz。
+当前发布版本：**0.4.0**，提供 Windows、macOS 与 Linux x64 构建。Linux x64 支持 AppImage、DEB、RPM 和 tar.gz：Ubuntu/Debian 使用 DEB，Fedora/RHEL 使用 RPM，Manjaro/Arch 使用 AppImage 或 tar.gz。Linux 包依赖系统 WebKitGTK 运行时。
 
 | 版本 | 下载 | 使用方式 |
 | --- | --- | --- |
-| 安装版 | [Windows x64 EXE](https://github.com/chen-yu-hao/Markitdown/releases/download/v0.3.10/Markit-0.3.10-Windows-x64-Setup.exe) | 运行安装程序，按提示选择安装目录 |
-| 便携版 | [Windows x64 ZIP](https://github.com/chen-yu-hao/Markitdown/releases/download/v0.3.10/Markit-0.3.10-Windows-x64.zip) | 完整解压到可写目录，运行 `Markit.exe` |
-| Ubuntu/Debian | [Linux x64 DEB](https://github.com/chen-yu-hao/Markitdown/releases/download/v0.3.10/Markit-0.3.10-Linux-x64.deb) | 使用 `sudo apt install ./Markit-0.3.10-Linux-x64.deb` |
-| Fedora/RHEL | [Linux x64 RPM](https://github.com/chen-yu-hao/Markitdown/releases/download/v0.3.10/Markit-0.3.10-Linux-x64.rpm) | 使用 `sudo dnf install ./Markit-0.3.10-Linux-x64.rpm` |
-| Manjaro/Arch | [Linux x64 tar.gz](https://github.com/chen-yu-hao/Markitdown/releases/download/v0.3.10/Markit-0.3.10-Linux-x64.tar.gz) | 解压后运行 `markit` |
-| 其他 Linux | [Linux x64 AppImage](https://github.com/chen-yu-hao/Markitdown/releases/download/v0.3.10/Markit-0.3.10-Linux-x64.AppImage) | 添加执行权限后直接运行 |
-| 源码 | [Source code (zip)](https://github.com/chen-yu-hao/Markitdown/archive/refs/tags/v0.3.10.zip) | GitHub 按版本标签生成，包含源码、依赖锁文件、测试和中文说明 |
+| Windows 安装版 | [Windows x64 EXE](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Windows-x64-Setup.exe) | 运行安装程序，按提示选择安装目录 |
+| Windows ZIP | [Windows x64 ZIP](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Windows-x64.zip) | 解压后运行 `Markit.exe`，需要系统 WebView2 |
+| macOS | [macOS x64 DMG](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-macOS-x64.dmg) | 打开 DMG 后将 Markit 拖入 Applications |
+| Ubuntu/Debian | [Linux x64 DEB](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.deb) | 使用 `sudo apt install ./Markit-0.4.0-Linux-x64.deb` |
+| Fedora/RHEL | [Linux x64 RPM](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.rpm) | 使用 `sudo dnf install ./Markit-0.4.0-Linux-x64.rpm` |
+| Manjaro/Arch | [Linux x64 tar.gz](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.tar.gz) | 解压后运行 `markit` |
+| 其他 Linux | [Linux x64 AppImage](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.AppImage) | 添加执行权限后直接运行 |
+| 源码 | [Source code (zip)](https://github.com/iawnix/Markit/archive/refs/tags/v0.4.0.zip) | GitHub 按版本标签生成，包含源码、依赖锁文件、测试和中文说明 |
 
 安装程序会添加 Markdown 文件的“打开方式”选项，不会强制修改默认应用。便携版需保留同目录的 `portable.json` 及其余程序文件。
 
-当前发行包未签名。[发布页](https://github.com/chen-yu-hao/Markitdown/releases/tag/v0.3.10)提供更新说明和 Windows/Linux 发行包。许可证和依赖说明随程序包与源码提供，不再作为单独的发布附件。
+当前发行包未签名。[发布页](https://github.com/iawnix/Markit/releases/tag/v0.4.0)提供更新说明和各平台发行包。许可证和依赖说明随程序包与源码提供，不再作为单独的发布附件。
 
 ### 更新已有版本
 
@@ -33,7 +34,7 @@ Markit 将即时排版、公式编号、Zotero 文献引用和多格式导出放
 - **安装版**：下载新版 EXE，安装到原目录，无需先卸载。设置与恢复数据保存在用户应用数据目录。
 - **便携版**：将新版解压到新目录，把旧版的 `data` 目录复制到新版目录中，再启动新版。另行存放的文稿和图片仍在原位置。
 
-目前采用手动更新，可在[最新发布页](https://github.com/chen-yu-hao/Markitdown/releases/latest)获取新版本。
+目前采用手动更新，可在[最新发布页](https://github.com/iawnix/Markit/releases/latest)获取新版本。
 
 ## 主要功能
 
@@ -74,27 +75,11 @@ $$
 
 支持 `\eqref{eq:energy}`、`\ref{eq:energy}` 和 `[@eq:energy]` 三种引用写法。增删前文公式后，引用编号随之更新；按住 `Ctrl` 点击引用可定位目标公式。也可通过 **编辑 → 学术引用** 插入标签、引用，或打开“文档编号设置”快速调整编号前缀。
 
-### Zotero 文献引用
+### 文献插件
 
-启动 Zotero 并启用本地 API 后，在 **偏好设置 → Markdown → 文献引用** 中检查连接。默认连接本机 `http://localhost:23119/api/`，读取 Zotero 个人文库。
+核心版本不会默认连接 Zotero，也不会初始化 citeproc、CSL 样式或参考文献面板。文献管理会通过独立的 `plugins/citations` 插件提供，插件安装入口和权限确认完成后再启用 Zotero 本地 API。旧文稿中的 `markedown:bibliography` 标记将由兼容插件识别。
 
-按 `Ctrl+Shift+C` 检索并多选插入文献，也可直接输入：
-
-```markdown
-相关研究见 [@D9PGQUM4; @T4IQZGRM; @MRHTZ5CI]。
-```
-
-示例中的键需替换为自己 Zotero 文库中实际存在的八位条目键。支持顺序编号和作者年份两种引文样式，已解析的文献信息可通过本地缓存离线排版。
-
-首次插入或输入有效引用时，默认在文末生成参考文献列表，并加入独立一行的占位符：
-
-```markdown
-<!-- markedown:bibliography -->
-```
-
-移动这一行即可调整参考文献的位置，例如放在附录之前。缺失文献和重复公式标签会提示，并要求在导出前处理。
-
-更多编号设置、手动号码和引用用法见[学术写作指南](resources/AcademicWriting.md)与[示例文稿](resources/AcademicExample.md)。
+公式编号、交叉引用和文档大纲属于核心功能。更多写作用法见[学术写作指南](resources/AcademicWriting.md)与[示例文稿](resources/AcademicExample.md)。
 
 ## 导入与导出
 
@@ -119,7 +104,7 @@ LaTeX、RST、Textile、MediaWiki 等文本导出会生成相邻的 `markedown-a
 | 数据 | 位置 |
 | --- | --- |
 | Windows 安装版设置、恢复记录与缓存 | 通常为 `%APPDATA%\Markit` |
-| Windows 便携版设置、恢复记录与缓存 | `Markit.exe` 旁的 `data` 目录 |
+| Windows ZIP 设置、恢复记录与缓存 | 通常为 `%APPDATA%\\Markit` |
 | Linux 设置、恢复记录与缓存 | 通常为 `~/.config/Markit`，或 `XDG_CONFIG_HOME` 指定的位置 |
 | 默认图片目录 | 文稿旁的 `assets`，可在图像设置中调整 |
 
@@ -146,25 +131,23 @@ LaTeX、RST、Textile、MediaWiki 等文本导出会生成相邻的 `markedown-a
 
 支持 UTF-8 文稿。超过 1 MiB 的文稿默认使用源码模式，超过 5 MiB 强制使用源码模式；工作区搜索最多返回 500 条匹配。
 
-目前不支持 Mermaid 预览、表格合并/拆分、外部主题安装和自动更新。Zotero 当前支持个人文库，暂不支持群组库选择与 Better BibTeX citekey 映射。
+目前不支持 Mermaid 预览、表格合并/拆分、外部主题安装和自动更新；Zotero/citeproc、Mermaid 和 Pandoc 适配器不随核心启动。
 
 已提供 Markdown 语法和文献提供器的[扩展接口](resources/Extensions.md)，供源码层面的功能扩展使用；当前没有外部插件安装入口或插件市场。
 
 ## 开发与反馈
 
-从源码运行需要 Windows x64 或 Linux x64，以及 Node.js 24 LTS。在工程目录执行：
+从源码运行需要 Node.js 24 LTS、Rust stable 和对应平台的 Tauri 依赖（Linux 需要 WebKitGTK 4.1 与 GTK3）。在工程目录执行：
 
 ```bash
 npm ci
-node node_modules/electron/install.js
-npm run dev
+npm run tauri:dev
 ```
 
-每次重新执行 `npm ci` 后，需要运行上面的 Electron 安装步骤。测试、打包与发布流程见[开发与构建说明](resources/Development.md)，已完成的验证及适用范围见[验证记录](resources/Validation.md)。
+浏览器前端可以单独检查：`npm run tauri:frontend`。测试、打包与发布流程见[开发与构建说明](resources/Development.md)，已完成的验证及适用范围见[验证记录](resources/Validation.md)。
 
-Windows 发布包使用 `npm run dist:win` 构建；Linux 发布包使用 `npm run dist:linux` 构建。详细流程见[开发与构建说明](resources/Development.md)。
+本地 Tauri 构建使用 `npm run tauri:build`；Windows、macOS 和 Linux 的正式安装包由 GitHub Actions 在原生 runner 上生成。详细流程见[开发与构建说明](resources/Development.md)。
 
-欢迎通过 [GitHub Issues](https://github.com/chen-yu-hao/Markitdown/issues)反馈问题或提出功能建议。报告问题时请附上应用版本、系统版本、复现步骤及去除个人信息的最小示例；涉及排版或点击定位时，也请注明主题和显示缩放。
+欢迎通过 [GitHub Issues](https://github.com/iawnix/Markit/issues)反馈问题或提出功能建议。报告问题时请附上应用版本、系统版本、复现步骤及去除个人信息的最小示例；涉及排版或点击定位时，也请注明主题和显示缩放。
 
 第三方组件、图标来源及许可证说明见[第三方与来源说明](resources/ThirdPartyNotices.md)。依赖清单与许可证文本位于程序可执行文件旁，也保存在源码的 `resources` 目录中。
-

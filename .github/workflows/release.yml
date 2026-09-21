@@ -97,10 +97,14 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = node -p "require('./package.json').version"
           $setup = Get-ChildItem 'apps/desktop/src-tauri/target/release/bundle/nsis' -Filter '*.exe' | Select-Object -First 1
+          $binary = Get-Item 'apps/desktop/src-tauri/target/release/markit.exe'
           if ($null -eq $setup) { throw 'Tauri NSIS installer was not generated.' }
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           Copy-Item -LiteralPath $setup.FullName -Destination "release-assets/Markit-$version-Windows-x64-Setup.exe"
-          Compress-Archive -LiteralPath $setup.FullName -DestinationPath "release-assets/Markit-$version-Windows-x64.zip" -Force
+          $portableDir = Join-Path $env:RUNNER_TEMP 'Markit-portable'
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item -LiteralPath $binary.FullName -Destination (Join-Path $portableDir 'Markit.exe')
+          Compress-Archive -LiteralPath (Join-Path $portableDir 'Markit.exe') -DestinationPath "release-assets/Markit-$version-Windows-x64.zip" -Force
 
       - name: Prepare macOS release assets
         if: matrix.platform == 'macos'
