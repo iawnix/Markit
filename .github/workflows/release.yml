@@ -1,12 +1,12 @@
-name: Release
+name: Release Markit
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag (for example v0.3.2)
+        description: Existing release tag (for example v0.4.0)
         required: true
         type: string
 
@@ -14,208 +14,201 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: markit-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
 jobs:
-  release:
-    runs-on: windows-latest
-    timeout-minutes: 40
-    permissions:
-      contents: write
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
-      - name: Preserve Source File Bytes
-        shell: pwsh
-        run: |
-          git config --global core.autocrlf false
-          git config --global core.eol lf
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
-          fetch-depth: 0
-          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 1
 
-      - name: Validate Release Tag
-        shell: pwsh
-        run: |
-          $manifest = Get-Content package.json -Raw | ConvertFrom-Json
-          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$' -or $env:RELEASE_TAG -ne "v$($manifest.version)") {
-            throw 'Release tag does not match package.json.'
-          }
-          git show-ref --verify "refs/tags/$env:RELEASE_TAG"
-          if ($LASTEXITCODE -ne 0) { throw 'The release tag must already exist.' }
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22.14.0'
+          node-version: 24
           cache: npm
 
-      - name: Use Canonical Windows Temp Directory
-        shell: pwsh
+      - name: Validate release version
+        shell: bash
         run: |
-          $ciTemp = Join-Path $env:RUNNER_TEMP markedown
-          New-Item -ItemType Directory -Path $ciTemp -Force | Out-Null
-          $ciTemp = node -e 'console.log(require("node:fs").realpathSync(process.argv[1]))' $ciTemp
-          if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the CI temp directory.' }
-          @("TEMP=$ciTemp", "TMP=$ciTemp") | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - run: npm ci
-      - name: Install Locked Electron Runtime
-        run: node node_modules/electron/install.js
-      - run: npm test -- --maxWorkers=2
-      - run: npm run build
-      - run: npx electron-builder --win nsis zip --x64 --publish never
-      - run: node scripts/verify-packaged.mjs
-      - run: node scripts/verify-equation-layout.mjs release/win-unpacked/Markit.exe
-      - name: Verify Packaged Equation Scrolling
-        timeout-minutes: 5
-        run: node scripts/verify-equation-scroll.mjs release/win-unpacked/Markit.exe
-      - name: Verify Packaged Theme Numbers
-        timeout-minutes: 5
-        run: node scripts/verify-theme-numbers.mjs release/win-unpacked/Markit.exe
-      - name: Verify Packaged Document Tabs
-        timeout-minutes: 10
-        run: node scripts/verify-document-tabs.mjs release/win-unpacked/Markit.exe
-      - name: Verify Packaged Academic Scrolling
-        timeout-minutes: 5
-        run: node scripts/verify-academic-scroll.mjs release/win-unpacked/Markit.exe
-      - name: Verify Packaged Sidebar Files
-        timeout-minutes: 5
-        run: node scripts/verify-file-tree.mjs release/win-unpacked/Markit.exe
-      - name: Verify Packaged Standalone Equations
-        timeout-minutes: 5
-        run: node scripts/verify-workspace-equations.mjs release/win-unpacked/Markit.exe
-      - run: node scripts/release.mjs
-
-      - name: Publish Verified Assets
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          $manifest = Get-Content package.json -Raw | ConvertFrom-Json
-          $records = Get-Content release/SHA256SUMS.txt
-          $downloads = @("Markit-$($manifest.version)-Windows-x64-Setup.exe", "Markit-$($manifest.version)-Windows-x64.zip")
-          $assets = @()
-          foreach ($record in $records) {
-            $parts = $record -split '  ', 2
-            $filename = Join-Path release $parts[1]
-            if ((Get-FileHash -LiteralPath $filename -Algorithm SHA256).Hash.ToLowerInvariant() -ne $parts[0]) {
-              throw "Checksum mismatch: $filename"
-            }
-            if ($parts[1] -cin $downloads) { $assets += $filename }
-          }
-          if ($assets.Count -ne $downloads.Count -or @($assets | Select-Object -Unique).Count -ne $downloads.Count) {
-            throw 'The verified installer and portable ZIP are required.'
-          }
-          $notes = Get-Content "resources/Release-$($manifest.version).md" -Raw
-          $base = "https://github.com/$env:GH_REPO/blob/$env:RELEASE_TAG"
-          $notes = $notes.Replace('(Validation.md)', "($base/resources/Validation.md)").Replace('(../README.md)', "($base/README.md)")
-          $notesPath = Join-Path $env:RUNNER_TEMP release-notes.md
-          Set-Content -LiteralPath $notesPath -Value $notes -Encoding utf8
-
-          $existing = gh release view $env:RELEASE_TAG --json isDraft 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            # Re-running a tag build must be able to refresh an already-published
-            # release. Asset names are versioned and --clobber below replaces the
-            # previous binaries after all verification steps have passed.
-            $isDraft = ($existing | ConvertFrom-Json).isDraft
-          } else {
-            gh release create $env:RELEASE_TAG --verify-tag --draft --title "Markit $($manifest.version)" --notes-file $notesPath
-            if ($LASTEXITCODE -ne 0) { throw 'Could not create the draft release.' }
-          }
-          gh release upload $env:RELEASE_TAG @assets --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed.' }
-          $published = gh release view $env:RELEASE_TAG --json assets | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0) { throw 'Could not verify uploaded assets.' }
-          $version = $manifest.version
-          $allowed = @(
-            "Markit-$version-Windows-x64-Setup.exe",
-            "Markit-$version-Windows-x64.zip",
-            "Markit-$version-Linux-x64.AppImage",
-            "Markit-$version-Linux-x64.deb",
-            "Markit-$version-Linux-x64.rpm",
-            "Markit-$version-Linux-x64.tar.gz"
-          )
-          foreach ($remote in $published.assets) {
-            if ($remote.name -cnotin $allowed) { throw "Unexpected release asset: $($remote.name)" }
-          }
-          foreach ($filename in $downloads) {
-            if (@($published.assets | Where-Object name -CEQ $filename).Count -ne 1) { throw "Uploaded asset missing: $filename" }
-          }
-          foreach ($filename in $assets) {
-            $file = Get-Item -LiteralPath $filename
-            $remote = @($published.assets | Where-Object name -eq $file.Name)
-            if ($remote.Count -ne 1 -or $remote[0].size -ne $file.Length) { throw "Uploaded asset mismatch: $filename" }
-          }
-          gh release edit $env:RELEASE_TAG --draft=false --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the release.' }
-
-  linux:
-    needs: release
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: write
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ inputs.tag || github.ref_name }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Validate Release Tag
-        run: |
-          version=$(node -p "require('./package.json').version")
+          version="$(node -p "require('./package.json').version")"
           test "$RELEASE_TAG" = "v$version"
-          git show-ref --verify "refs/tags/$RELEASE_TAG"
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22.14.0'
-          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Linux Packaging Tools
-        run: sudo apt-get update && sudo apt-get install --yes rpm
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install --yes libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf rpm
+
       - run: npm ci
-      - name: Install Locked Electron Runtime
-        run: node node_modules/electron/install.js
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npx electron-builder --linux AppImage deb rpm tar.gz --x64 --publish never
-      - run: node scripts/release.mjs --platform=linux
+      - run: npx tsc -p apps/desktop/tsconfig.json --noEmit
 
-      - name: Upload Linux Assets
+      - name: Build Tauri bundles
+        if: matrix.platform == 'linux'
+        run: npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles appimage,deb,rpm
+
+      - name: Build Tauri bundles
+        if: matrix.platform == 'windows'
+        run: npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles nsis
+
+      - name: Build Tauri bundles
+        if: matrix.platform == 'macos'
+        run: npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles app,dmg
+
+      - name: Prepare Linux release assets
+        if: matrix.platform == 'linux'
+        shell: bash
         run: |
-          version=$(node -p "require('./package.json').version")
-          assets=(
-            "release/Markit-$version-Linux-x64.AppImage"
-            "release/Markit-$version-Linux-x64.deb"
-            "release/Markit-$version-Linux-x64.rpm"
-            "release/Markit-$version-Linux-x64.tar.gz"
-          )
-          for asset in "${assets[@]}"; do test -s "$asset"; done
-          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          mapfile -t remote < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
-          allowed=(
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          output="apps/desktop/src-tauri/target/release/bundle"
+          mkdir -p release-assets
+          appimage="$(find "$output/appimage" -type f -name '*.AppImage' -print -quit)"
+          deb="$(find "$output/deb" -type f -name '*.deb' -print -quit)"
+          rpm="$(find "$output/rpm" -type f -name '*.rpm' -print -quit)"
+          test -n "$appimage" -a -n "$deb" -a -n "$rpm"
+          cp "$appimage" "release-assets/Markit-$version-Linux-x64.AppImage"
+          cp "$deb" "release-assets/Markit-$version-Linux-x64.deb"
+          cp "$rpm" "release-assets/Markit-$version-Linux-x64.rpm"
+          test -x apps/desktop/src-tauri/target/release/markit
+          tar -C apps/desktop/src-tauri/target/release -czf "release-assets/Markit-$version-Linux-x64.tar.gz" markit
+
+      - name: Prepare Windows release assets
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = node -p "require('./package.json').version"
+          $setup = Get-ChildItem 'apps/desktop/src-tauri/target/release/bundle/nsis' -Filter '*.exe' | Select-Object -First 1
+          if ($null -eq $setup) { throw 'Tauri NSIS installer was not generated.' }
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item -LiteralPath $setup.FullName -Destination "release-assets/Markit-$version-Windows-x64-Setup.exe"
+          Compress-Archive -LiteralPath $setup.FullName -DestinationPath "release-assets/Markit-$version-Windows-x64.zip" -Force
+
+      - name: Prepare macOS release assets
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          dmg="$(find apps/desktop/src-tauri/target/release/bundle/dmg -type f -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          mkdir -p release-assets
+          cp "$dmg" "release-assets/Markit-$version-macOS-x64.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Markit-${{ matrix.platform }}-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate release tag
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "v$version"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Markit-*-release-assets
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          expected=(
             "Markit-$version-Windows-x64-Setup.exe"
             "Markit-$version-Windows-x64.zip"
+            "Markit-$version-macOS-x64.dmg"
             "Markit-$version-Linux-x64.AppImage"
             "Markit-$version-Linux-x64.deb"
             "Markit-$version-Linux-x64.rpm"
             "Markit-$version-Linux-x64.tar.gz"
           )
-          for name in "${remote[@]}"; do
-            printf '%s\n' "${allowed[@]}" | grep -Fxq "$name" || { echo "Unexpected release asset: $name" >&2; exit 1; }
+          mapfile -t actual < <(find release-assets -maxdepth 1 -type f -printf '%f\n' | sort)
+          printf '%s\n' "${actual[@]}"
+          test "${#actual[@]}" -eq "${#expected[@]}"
+          for name in "${expected[@]}"; do
+            test -s "release-assets/$name"
+            printf '%s\n' "${actual[@]}" | grep -Fxq "$name"
           done
-          for name in "${allowed[@]}"; do
-            printf '%s\n' "${remote[@]}" | grep -Fxq "$name" || { echo "Missing release asset: $name" >&2; exit 1; }
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          notes_file="$RUNNER_TEMP/markit-release-notes.md"
+          cat > "$notes_file" <<EOF
+          ## Markit $version
+
+          Cross-platform Tauri desktop build for Windows, macOS and Linux.
+
+          Linux packages include AppImage, Debian, RPM and portable tar.gz builds.
+          The Linux packages use the system WebKitGTK runtime documented in the repository.
+          EOF
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" --repo "$GH_REPO" release-assets/* --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --title "Markit $version" --notes-file "$notes_file" --draft=false --latest
+          else
+            gh release create "$RELEASE_TAG" --repo "$GH_REPO" --verify-tag --title "Markit $version" --notes-file "$notes_file" release-assets/*
+          fi
+
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          expected=(
+            "Markit-$version-Windows-x64-Setup.exe"
+            "Markit-$version-Windows-x64.zip"
+            "Markit-$version-macOS-x64.dmg"
+            "Markit-$version-Linux-x64.AppImage"
+            "Markit-$version-Linux-x64.deb"
+            "Markit-$version-Linux-x64.rpm"
+            "Markit-$version-Linux-x64.tar.gz"
+          )
+          for name in "${expected[@]}"; do
+            gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name' | grep -Fxq "$name"
           done
