@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Markit",
+  "version": "0.3.10",
+  "identifier": "com.markit.app",
+  "build": {
+    "beforeDevCommand": "npm run dev --prefix apps/desktop",
+    "beforeBuildCommand": "npm run build --prefix apps/desktop",
+    "devUrl": "http://127.0.0.1:5174",
+    "frontendDist": "../../../dist/desktop"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [{ "title": "Markit", "width": 1280, "height": 820, "minWidth": 820, "minHeight": 560, "resizable": true }],
+    "security": { "csp": "default-src 'self'; img-src 'self' data: markit-asset:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:23119; object-src 'none'; base-uri 'none'" }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "nsis", "appimage", "deb", "rpm"],
+    "createUpdaterArtifacts": false,
+    "shortDescription": "Lightweight Markdown editor",
+    "category": "Office",
+    "fileAssociations": [{ "ext": ["md", "markdown", "mdown", "mkd"], "mimeType": "text/markdown", "name": "Markdown document" }],
+    "linux": { "deb": { "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"] }, "rpm": { "depends": ["webkit2gtk4.1", "gtk3"] } }
+  }
+}

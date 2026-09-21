@@ -1,11 +1,12 @@
 {
   "name": "markit",
   "productName": "Markit",
-  "desktopName": "com.zhuanz.markit",
+  "desktopName": "com.markit.app",
   "version": "0.3.10",
   "private": true,
-  "description": "Markit Markdown editor for desktop Linux and Windows",
+  "description": "Markit lightweight cross-platform Markdown editor",
   "author": "Markit contributors",
+  "license": "MIT",
   "main": "dist/main/index.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -21,7 +22,10 @@
     "dist": "npm run build && electron-builder --x64 && node scripts/release.mjs",
     "dist:win": "npm run build && electron-builder --win nsis zip --x64 && node scripts/release.mjs --platform=windows",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb rpm tar.gz --x64 && node scripts/release.mjs --platform=linux",
-    "test:ui": "node scripts/verify-ui-v2.mjs"
+    "test:ui": "node scripts/verify-ui-v2.mjs",
+    "tauri:dev": "tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
+    "tauri:build": "tauri build --config apps/desktop/src-tauri/tauri.conf.json",
+    "tauri:frontend": "npm run build --prefix apps/desktop"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
@@ -35,6 +39,8 @@
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "6.43.11",
     "@lezer/markdown": "^1.4.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "@xmldom/xmldom": "0.8.15",
     "citeproc": "2.4.63",
     "dompurify": "^3.3.0",
@@ -44,12 +50,22 @@
     "lucide-react": "^0.468.0",
     "markdown-it": "15.0.1",
     "mathjax-full": "3.2.2",
+    "prosemirror-commands": "^1.7.2",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-markdown": "^1.13.8",
+    "prosemirror-model": "^1.25.12",
+    "prosemirror-schema-basic": "^1.2.4",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-view": "^1.42.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sanitize-html": "2.17.7",
     "sharp": "^0.34.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.5",
     "@types/katex": "^0.16.7",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.0.0",
@@ -66,7 +82,7 @@
     "vitest": "^4.0.0"
   },
   "build": {
-    "appId": "com.zhuanz.markit",
+    "appId": "com.markit.app",
     "productName": "Markit",
     "electronDist": "node_modules/electron/dist",
     "directories": {
