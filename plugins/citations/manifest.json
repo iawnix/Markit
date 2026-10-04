@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "apiVersion": 1,
   "entry": "dist/index.js",
-  "permissions": ["document.read", "document.write", "filesystem.read", "filesystem.write", "network", "settings"],
+  "permissions": ["document.read", "document.write", "network", "commands", "settings"],
   "contributions": [
     { "type": "markdown", "id": "citations" },
     { "type": "references", "id": "zotero", "title": "Zotero" },

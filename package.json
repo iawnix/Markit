@@ -25,7 +25,8 @@
     "test:ui": "node scripts/verify-ui-v2.mjs",
     "tauri:dev": "tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
     "tauri:build": "tauri build --config apps/desktop/src-tauri/tauri.conf.json",
-    "tauri:frontend": "npm run build --prefix apps/desktop"
+    "tauri:frontend": "npm run build --prefix apps/desktop",
+    "plugin:citations": "node scripts/build-plugin.mjs plugins/citations"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
