@@ -20,6 +20,14 @@ npm ci
 
 依赖版本以 `package-lock.json` 和 `apps/desktop/src-tauri/Cargo.lock` 为准。Tauri 使用系统 WebView，不下载或打包 Chromium。
 
+Fedora 44 可安装构建依赖：
+
+```bash
+sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel patchelf rpm
+```
+
+`cargo check` 不需要图形会话；`npm run tauri:dev` 和实际桌面启动需要可用的 Wayland/X11 显示环境。无头服务器上应使用 `cargo check` 或 CI runner 验证编译，不要把 GTK 初始化失败当作构建失败。
+
 ## 开发和检查
 
 启动桌面开发环境：
