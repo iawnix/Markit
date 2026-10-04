@@ -105,7 +105,14 @@ button { border: 0; cursor: pointer; color: inherit; }
 .plugin-toggle.enabled::after { transform: translateX(10px); }
 .plugin-error { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #edc9c3; border-radius: 4px; background: #fff7f5; color: #a74d43; font-size: 11px; line-height: 1.5; }
 .plugin-panel { padding: 2px 0; }
+.plugin-panel-search { width: calc(100% - 12px); margin: 0 6px 10px; padding: 7px 8px; border: 1px solid #d8dfd9; border-radius: 4px; outline: 0; background: #fff; color: #344139; font-size: 12px; }
+.plugin-panel-search:focus { border-color: #77a88d; box-shadow: 0 0 0 2px #dcebe1; }
 .plugin-panel-status { margin: 18px 7px 6px; color: #526056; font-size: 12px; }
 .plugin-panel-provider { margin: 0 7px; color: #9aa59d; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .plugin-panel-attribution { margin: 18px 7px 0; padding-top: 12px; border-top: 1px solid #e7ebe6; color: #8b958e; font-size: 10px; line-height: 1.55; overflow-wrap: anywhere; }
+.plugin-panel-items { display: flex; flex-direction: column; gap: 4px; }
+.plugin-panel-item { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 8px 7px; border-radius: 4px; background: transparent; text-align: left; }
+.plugin-panel-item:hover:not(:disabled) { background: #eaf0eb; color: #245b45; }
+.plugin-panel-item strong { overflow: hidden; color: #526056; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-panel-item small { overflow: hidden; color: #8b958e; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 900px) { body { min-width: 0; } .sidebar { width: 210px; } .editor-column { width: min(860px, calc(100% - 40px)); } .brand { min-width: 90px; } }

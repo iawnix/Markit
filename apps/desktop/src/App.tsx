@@ -14,8 +14,10 @@ import { PluginWorkerHost } from '../../../packages/plugin-sdk/src/worker-host';
 const ProseMirrorEditor = lazy(() => import('./ProseMirrorEditor').then(module => ({ default: module.ProseMirrorEditor })));
 
 type Sidebar = 'files' | 'outline' | 'search' | 'plugin';
-type PluginCommandContribution = { pluginId: string; id: string; title: string; shortcut?: string; host: PluginWorkerHost };
-type PluginPanelContribution = { pluginId: string; id: string; title: string; attribution?: string };
+type PluginPanelItem = { id: string; title: string; meta?: string; command?: { id: string; args?: unknown[] } };
+type PluginPanelContent = { status?: string; items?: PluginPanelItem[] };
+type PluginCommandContribution = { pluginId: string; id: string; title: string; shortcut?: string; visible?: boolean; host: PluginWorkerHost };
+type PluginPanelContribution = { pluginId: string; id: string; title: string; attribution?: string; searchCommand?: string; content?: PluginPanelContent };
 
 function titleFor(path: string | null, locale: Locale) {
   return path?.split(/[\\/]/).at(-1) || message(locale, 'untitled');
@@ -66,6 +68,9 @@ export default function App() {
   useEffect(() => { localStorage.setItem('markit.locale', locale); document.documentElement.lang = locale; }, [locale]);
   useEffect(() => { documentsRef.current = documents; }, [documents]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  useEffect(() => {
+    setSelectedPluginPanel(current => current ? pluginPanels.find(panel => panel.pluginId === current.pluginId && panel.id === current.id) || current : null);
+  }, [pluginPanels]);
   useEffect(() => {
     let cancelled = false;
     void Promise.all(plugins.filter(plugin => plugin.enabled).map(async plugin => {
@@ -259,6 +264,18 @@ export default function App() {
           setDocuments(current => current.map(item => item.id === activeIdRef.current ? { ...item, source, dirty: source !== item.savedSource } : item));
           return null;
         }
+        if (method === 'settings.get') {
+          const key = args[0];
+          if (typeof key !== 'string' || !/^[a-zA-Z0-9._-]{1,100}$/u.test(key)) throw new Error('Plugin setting key is invalid.');
+          return localStorage.getItem(`markit.plugin.${plugin.manifest.id}.${key}`);
+        }
+        if (method === 'settings.set') {
+          const [key, value] = args;
+          if (typeof key !== 'string' || !/^[a-zA-Z0-9._-]{1,100}$/u.test(key) || typeof value !== 'string') throw new Error('Plugin setting is invalid.');
+          if (value.length > 512 * 1024) throw new Error('Plugin setting exceeds the 512 KiB limit.');
+          localStorage.setItem(`markit.plugin.${plugin.manifest.id}.${key}`, value);
+          return null;
+        }
         if (method === 'network.fetch') {
           const [rawUrl, rawInit] = args;
           if (typeof rawUrl !== 'string') throw new Error('Plugin network URL is invalid.');
@@ -280,7 +297,7 @@ export default function App() {
         if (method === 'commands.register') {
           const descriptor = args[0];
           if (!descriptor || typeof descriptor !== 'object' || typeof (descriptor as { id?: unknown }).id !== 'string' || typeof (descriptor as { title?: unknown }).title !== 'string') throw new Error('Plugin command descriptor is invalid.');
-          const command = descriptor as { id: string; title: string; shortcut?: string };
+          const command = descriptor as { id: string; title: string; shortcut?: string; visible?: boolean };
           setPluginCommands(current => [...current.filter(item => !(item.pluginId === plugin.manifest.id && item.id === command.id)), { ...command, pluginId: plugin.manifest.id, host }]);
           return null;
         }
@@ -292,8 +309,23 @@ export default function App() {
         if (method === 'panels.register') {
           const descriptor = args[0];
           if (!descriptor || typeof descriptor !== 'object' || typeof (descriptor as { id?: unknown }).id !== 'string' || typeof (descriptor as { title?: unknown }).title !== 'string') throw new Error('Plugin panel descriptor is invalid.');
-          const panel = descriptor as { id: string; title: string; attribution?: string };
-          setPluginPanels(current => [...current.filter(item => !(item.pluginId === plugin.manifest.id && item.id === panel.id)), { ...panel, pluginId: plugin.manifest.id }]);
+          const panel = descriptor as { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: { status?: string; items?: unknown[] } };
+          const initialContent: PluginPanelContent = {
+            status: typeof panel.initialContent?.status === 'string' ? panel.initialContent.status.slice(0, 1000) : undefined,
+            items: Array.isArray(panel.initialContent?.items) ? panel.initialContent.items.filter((item): item is PluginPanelItem => Boolean(item && typeof item === 'object' && typeof (item as PluginPanelItem).id === 'string' && typeof (item as PluginPanelItem).title === 'string')).slice(0, 100) : [],
+          };
+          setPluginPanels(current => [...current.filter(item => !(item.pluginId === plugin.manifest.id && item.id === panel.id)), { ...panel, pluginId: plugin.manifest.id, content: initialContent }]);
+          return null;
+        }
+        if (method === 'panels.update') {
+          const [panelId, rawContent] = args;
+          if (typeof panelId !== 'string' || !rawContent || typeof rawContent !== 'object') throw new Error('Plugin panel update is invalid.');
+          const content = rawContent as { status?: unknown; items?: unknown };
+          const nextContent: PluginPanelContent = {
+            status: typeof content.status === 'string' ? content.status.slice(0, 1000) : undefined,
+            items: Array.isArray(content.items) ? content.items.filter((item): item is PluginPanelItem => Boolean(item && typeof item === 'object' && typeof (item as PluginPanelItem).id === 'string' && typeof (item as PluginPanelItem).title === 'string')).slice(0, 100) : [],
+          };
+          setPluginPanels(current => current.map(panel => panel.pluginId === plugin.manifest.id && panel.id === panelId ? { ...panel, content: nextContent } : panel));
           return null;
         }
         if (method === 'panels.unregister') {
@@ -319,9 +351,14 @@ export default function App() {
     persistPlugins(registry.list());
   }
 
-  async function runPluginCommand(command: PluginCommandContribution) {
-    try { await command.host.executeCommand(command.id); }
+  async function runPluginCommand(command: PluginCommandContribution, args: unknown[] = []) {
+    try { await command.host.executeCommand(command.id, args); }
     catch (error) { setPluginError(error instanceof Error ? error.message : String(error)); }
+  }
+
+  function runPanelAction(panel: PluginPanelContribution, action: { id: string; args?: unknown[] }) {
+    const command = pluginCommands.find(item => item.pluginId === panel.pluginId && item.id === action.id);
+    if (command) void runPluginCommand(command, action.args || []);
   }
 
   const filteredHeadings = useMemo(() => headings.filter(item => item.text.toLowerCase().includes(query.toLowerCase())), [headings, query]);
@@ -346,13 +383,13 @@ export default function App() {
           {sidebar === 'files' && <><div className="sidebar-heading"><span>{t('files')}</span><span><button className="icon-button" title="Open folder" aria-label="Open folder" onClick={() => void chooseWorkspace()}><FolderOpen size={15} /></button><button className="icon-button" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={15} /></button></span></div><p className="workspace-path">{workspace || 'Local workspace'}</p>{entries.filter(entry => !entry.directory && /\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)).map(entry => <button key={entry.path} className={`file-row ${active?.path === entry.path ? 'active' : ''}`} onClick={() => void openPath(entry.path)}><FileText size={15} /><span>{entry.name}</span></button>)}{!entries.length && <button className="file-row active" onClick={() => void chooseDocument()}><FileText size={15} /><span>{active ? titleFor(active.path, locale) : t('emptyTitle')}</span></button>}</>}
           {sidebar === 'outline' && <><div className="sidebar-heading"><span>{t('outline')}</span><span className="count">{headings.length}</span></div>{filteredHeadings.length ? <nav className="outline-list">{filteredHeadings.map(item => <button key={item.id} style={{ paddingLeft: `${12 + item.level * 10}px` }} onClick={() => jumpToHeading(item)}>{item.text}</button>)}</nav> : <p className="empty-sidebar">{t('noOutline')}</p>}</>}
           {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span></div><input className="sidebar-search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('search')} />{query && <p className="empty-sidebar">{active?.source.toLowerCase().includes(query.toLowerCase()) ? '1 match' : 'No matches'}</p>}</>}
-          {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div><p className="plugin-panel-status">{t('pluginPanelReady')}</p><p className="plugin-panel-provider">{t('pluginPanelProvider')}: {selectedPluginPanel.pluginId}</p>{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
+          {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div>{selectedPluginPanel.searchCommand && <input className="plugin-panel-search" aria-label={t('pluginSearchPlaceholder')} placeholder={t('pluginSearchPlaceholder')} onKeyDown={event => { if (event.key === 'Enter') { const command = pluginCommands.find(item => item.pluginId === selectedPluginPanel.pluginId && item.id === selectedPluginPanel.searchCommand); if (command) void runPluginCommand(command, [(event.currentTarget as HTMLInputElement).value]); } }} />}{selectedPluginPanel.content?.status && <p className="plugin-panel-status">{selectedPluginPanel.content.status}</p>}{selectedPluginPanel.content?.items?.length ? <div className="plugin-panel-items">{selectedPluginPanel.content.items.map(item => <button className="plugin-panel-item" key={item.id} onClick={() => item.command && runPanelAction(selectedPluginPanel, item.command)} disabled={!item.command}><strong>{item.title}</strong>{item.meta && <small>{item.meta}</small>}</button>)}</div> : <p className="plugin-panel-status">{t('pluginNoResults')}</p>}{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
         </div>
       </aside>
       <main className="main-panel">
         <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); closeDocument(document.id); }}><X size={13} /></span></button>)}</div>
         {active ? <>
-          <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
+          <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <textarea ref={editorRef} className="source-editor" value={active.source} onChange={event => updateSource(event.target.value)} onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDrop={event => { const files = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} spellCheck={false} /> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} onChange={updateSource} /></Suspense>}</div></div>
           <footer className="statusbar"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></footer>
         </> : <div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div>}

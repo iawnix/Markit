@@ -35,8 +35,8 @@ export class PluginWorkerHost {
     this.worker.terminate();
   }
 
-  async executeCommand(id: string): Promise<void> {
-    await this.request('command.execute', [id]);
+  async executeCommand(id: string, args: unknown[] = []): Promise<void> {
+    await this.request('command.execute', [id, args]);
   }
 
   private async handleMessage(message: RequestMessage | ResponseMessage) {

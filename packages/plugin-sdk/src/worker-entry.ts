@@ -4,7 +4,7 @@ interface ResponseMessage { type: 'response'; id: string; ok: boolean; value?: u
 const scope = globalThis as unknown as { postMessage(message: unknown): void; addEventListener(type: 'message', listener: (event: MessageEvent) => void | Promise<void>): void };
 const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
 let activePlugin: { deactivate?(): void | Promise<void> } | null = null;
-const commands = new Map<string, { run(): void | Promise<void> }>();
+const commands = new Map<string, { run(...args: unknown[]): void | Promise<void> }>();
 const panels = new Set<string>();
 
 function request(method: string, args: unknown[]): Promise<unknown> {
@@ -33,19 +33,22 @@ scope.addEventListener('message', async event => {
       const context = {
         manifest,
         hasPermission: (permission: string) => manifest.permissions.includes(permission),
-        registerCommand: (command: { id: string; title: string; shortcut?: string; run(): void | Promise<void> }) => {
+        registerCommand: (command: { id: string; title: string; shortcut?: string; visible?: boolean; run(...args: unknown[]): void | Promise<void> }) => {
           commands.set(command.id, command);
-          void request('commands.register', [{ id: command.id, title: command.title, shortcut: command.shortcut }]);
+          void request('commands.register', [{ id: command.id, title: command.title, shortcut: command.shortcut, visible: command.visible }]);
           return () => { commands.delete(command.id); void request('commands.unregister', [command.id]); };
         },
-        registerPanel: (panel: { id: string; title: string; attribution?: string; mount(container: HTMLElement): () => void }) => {
+        registerPanel: (panel: { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: { status?: string; items?: unknown[] }; mount(container: HTMLElement): () => void }) => {
           panels.add(panel.id);
-          void request('panels.register', [{ id: panel.id, title: panel.title, attribution: panel.attribution }]);
+          void request('panels.register', [{ id: panel.id, title: panel.title, attribution: panel.attribution, searchCommand: panel.searchCommand, initialContent: panel.initialContent }]);
           return () => { panels.delete(panel.id); void request('panels.unregister', [panel.id]); };
         },
         readDocument: () => request('document.read', []),
         updateDocument: (source: string) => request('document.update', [source]),
         fetch: (url: string, init?: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string }) => request('network.fetch', [url, init || {}]),
+        updatePanel: (panelId: string, content: { status?: string; items?: unknown[] }) => request('panels.update', [panelId, content]),
+        readSetting: (key: string) => request('settings.get', [key]),
+        writeSetting: (key: string, value: string) => request('settings.set', [key, value]),
       };
       await plugin.activate(context);
       activePlugin = plugin;
@@ -63,8 +66,9 @@ scope.addEventListener('message', async event => {
   if (message.method === 'command.execute') {
     try {
       const id = message.args[0];
+      const args = Array.isArray(message.args[1]) ? message.args[1] : [];
       if (typeof id !== 'string' || !commands.has(id)) throw new Error('Plugin command is unavailable.');
-      await commands.get(id)?.run();
+      await commands.get(id)?.run(...args);
       scope.postMessage({ type: 'response', id: message.id, ok: true } satisfies ResponseMessage);
     } catch (error) {
       scope.postMessage({ type: 'response', id: message.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies ResponseMessage);

@@ -8,15 +8,20 @@ export interface MarkitPluginContext {
   readDocument(): Promise<DocumentSnapshot | null>;
   updateDocument(source: string): Promise<void>;
   fetch(url: string, init?: PluginFetchInit): Promise<PluginFetchResponse>;
+  updatePanel(panelId: string, content: PluginPanelContent): Promise<void>;
+  readSetting(key: string): Promise<string | null>;
+  writeSetting(key: string, value: string): Promise<void>;
 }
 
 export interface PluginFetchInit { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string }
 export interface PluginFetchResponse { status: number; headers: Record<string, string>; body: string }
 
-export interface PluginCommand { id: string; title: string; shortcut?: string; run(): void | Promise<void> }
-export interface PluginCommandDescriptor { id: string; title: string; shortcut?: string }
-export interface PluginPanel { id: string; title: string; attribution?: string; mount(container: HTMLElement): () => void }
-export interface PluginPanelDescriptor { id: string; title: string; attribution?: string }
+export interface PluginCommand { id: string; title: string; shortcut?: string; visible?: boolean; run(...args: unknown[]): void | Promise<void> }
+export interface PluginCommandDescriptor { id: string; title: string; shortcut?: string; visible?: boolean }
+export interface PluginPanelItem { id: string; title: string; meta?: string; command?: { id: string; args?: unknown[] } }
+export interface PluginPanelContent { status?: string; items?: PluginPanelItem[] }
+export interface PluginPanel { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: PluginPanelContent; mount(container: HTMLElement): () => void }
+export interface PluginPanelDescriptor { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: PluginPanelContent }
 export interface MarkitPlugin { activate(context: MarkitPluginContext): void | Promise<void>; deactivate?(): void | Promise<void> }
 
 export function validateManifest(value: unknown): value is PluginManifest {

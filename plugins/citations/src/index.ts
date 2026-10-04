@@ -6,6 +6,11 @@ const bibliographyEndMarker = '<!-- /markedown:bibliography -->';
 const citationKeyPattern = /^[A-Z0-9]{8}$/;
 
 type ZoteroItem = { key?: string; data?: { key?: string; title?: string; date?: string; creators?: Array<{ creatorType?: string; name?: string; firstName?: string; lastName?: string }> } };
+type CitationContext = {
+  fetch(url: string): Promise<{ status: number; body: string }>;
+  readSetting(key: string): Promise<string | null>;
+  writeSetting(key: string, value: string): Promise<void>;
+};
 
 function itemsFrom(body: string): ZoteroItem[] {
   const value = JSON.parse(body) as unknown;
@@ -47,18 +52,51 @@ async function zoteroItems(context: { fetch(url: string): Promise<{ status: numb
   try { return itemsFrom(response.body); } catch { throw new Error('Zotero returned invalid JSON.'); }
 }
 
+async function searchZotero(context: CitationContext, query: string): Promise<ZoteroItem[]> {
+  const normalized = query.trim().slice(0, 300);
+  if (!normalized) return [];
+  const cached = await context.readSetting('search-cache');
+  if (cached) {
+    try {
+      const value = JSON.parse(cached) as { query?: string; savedAt?: number; items?: ZoteroItem[] };
+      if (value.query === normalized && typeof value.savedAt === 'number' && Date.now() - value.savedAt < 5 * 60 * 1000 && Array.isArray(value.items)) return value.items;
+    } catch { /* Refresh malformed cache below. */ }
+  }
+  const response = await context.fetch(`http://127.0.0.1:23119/api/users/0/items?format=json&limit=30&search=${encodeURIComponent(normalized)}`);
+  if (response.status < 200 || response.status >= 300) throw new Error(`Zotero returned HTTP ${response.status}.`);
+  const items = itemsFrom(response.body);
+  await context.writeSetting('search-cache', JSON.stringify({ query: normalized, savedAt: Date.now(), items }));
+  return items;
+}
+
+function panelItems(items: ZoteroItem[]): Array<{ id: string; title: string; meta: string; command: { id: string; args: string[] } }> {
+  return items.flatMap(item => {
+    const key = keyFor(item);
+    if (!key) return [];
+    const data = item.data || {};
+    const authors = (data.creators || []).filter(creator => creator.creatorType === 'author' || !creator.creatorType).map(creator => creator.name || [creator.firstName, creator.lastName].filter(Boolean).join(' ')).filter(Boolean).join(', ');
+    const year = (data.date || '').match(/\d{4}/u)?.[0] || 'n.d.';
+    return [{ id: key, title: data.title || key, meta: `${authors || 'Unknown author'} · ${year} · ${key}`, command: { id: 'insert-zotero-citation', args: [key] } }];
+  });
+}
+
 export default {
   activate(context: {
-    registerCommand(command: { id: string; title: string; run(): void | Promise<void> }): () => void;
-    registerPanel(panel: { id: string; title: string; attribution?: string; mount(container: HTMLElement): () => void }): () => void;
+    registerCommand(command: { id: string; title: string; visible?: boolean; run(...args: unknown[]): void | Promise<void> }): () => void;
+    registerPanel(panel: { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: { status?: string; items?: unknown[] }; mount(container: HTMLElement): () => void }): () => void;
     readDocument(): Promise<{ source: string } | null>;
     updateDocument(source: string): Promise<void>;
     fetch(url: string): Promise<{ status: number; body: string }>;
+    updatePanel(panelId: string, content: { status?: string; items?: unknown[] }): Promise<void>;
+    readSetting(key: string): Promise<string | null>;
+    writeSetting(key: string, value: string): Promise<void>;
   }) {
     context.registerPanel({
       id: 'references',
       title: 'References',
       attribution: '(c) Frank Bennett · citeproc-js implements the Citation Style Language · https://citationstyles.org/',
+      searchCommand: 'search-zotero',
+      initialContent: { status: 'Search Zotero for a reference.', items: [] },
       mount() { return () => {}; },
     });
 
@@ -84,12 +122,29 @@ export default {
     });
 
     context.registerCommand({
+      id: 'search-zotero',
+      title: 'Search Zotero',
+      visible: false,
+      async run(...args: unknown[]) {
+        const query = typeof args[0] === 'string' ? args[0] : '';
+        if (!query.trim()) {
+          await context.updatePanel('references', { status: 'Enter a title, author or year to search.', items: [] });
+          return;
+        }
+        await context.updatePanel('references', { status: 'Searching Zotero…', items: [] });
+        const items = await searchZotero(context, query);
+        await context.updatePanel('references', { status: items.length ? `${items.length} references found.` : 'No matching references.', items: panelItems(items) });
+      },
+    });
+
+    context.registerCommand({
       id: 'insert-zotero-citation',
       title: 'Insert Zotero citation',
-      async run() {
+      async run(...args: unknown[]) {
         const document = await context.readDocument();
         if (!document) throw new Error('Open a document before inserting a citation.');
-        const item = (await zoteroItems(context))[0];
+        const requestedKey = typeof args[0] === 'string' && citationKeyPattern.test(args[0]) ? args[0] : undefined;
+        const item = (await zoteroItems(context, requestedKey ? [requestedKey] : undefined))[0];
         const key = item && keyFor(item);
         if (!key) throw new Error('Zotero did not return an eight-character item key.');
         if (document.source.includes(`@${key}`)) return;
