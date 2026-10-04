@@ -89,6 +89,9 @@ jobs:
           cp "$rpm" "release-assets/Markit-$version-Linux-x64.rpm"
           test -x apps/desktop/src-tauri/target/release/markit
           tar -C apps/desktop/src-tauri/target/release -czf "release-assets/Markit-$version-Linux-x64.tar.gz" markit
+          npm run plugin:citations
+          plugin_version="$(node -p "require('./plugins/citations/manifest.json').version")"
+          cp "plugins/citations/dist/markit.citations.markit-plugin" "release-assets/Markit-citations-$plugin_version.markit-plugin"
 
       - name: Prepare Windows release assets
         if: matrix.platform == 'windows'
@@ -155,6 +158,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
+          plugin_version="$(node -p "require('./plugins/citations/manifest.json').version")"
           expected=(
             "Markit-$version-Windows-x64-Setup.exe"
             "Markit-$version-Windows-x64.zip"
@@ -163,6 +167,7 @@ jobs:
             "Markit-$version-Linux-x64.deb"
             "Markit-$version-Linux-x64.rpm"
             "Markit-$version-Linux-x64.tar.gz"
+            "Markit-citations-$plugin_version.markit-plugin"
           )
           mapfile -t actual < <(find release-assets -maxdepth 1 -type f -printf '%f\n' | sort)
           printf '%s\n' "${actual[@]}"
@@ -204,6 +209,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
+          plugin_version="$(node -p "require('./plugins/citations/manifest.json').version")"
           expected=(
             "Markit-$version-Windows-x64-Setup.exe"
             "Markit-$version-Windows-x64.zip"
@@ -212,6 +218,7 @@ jobs:
             "Markit-$version-Linux-x64.deb"
             "Markit-$version-Linux-x64.rpm"
             "Markit-$version-Linux-x64.tar.gz"
+            "Markit-citations-$plugin_version.markit-plugin"
           )
           for name in "${expected[@]}"; do
             gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name' | grep -Fxq "$name"

@@ -40,6 +40,9 @@ jobs:
           $assets = @(gh api --paginate --slurp "repos/$env:GH_REPO/releases/$($release.id)/assets" | ConvertFrom-Json | ForEach-Object { $_ })
           if ($LASTEXITCODE -ne 0) { throw 'Could not list release assets.' }
           $assets = @($assets | ForEach-Object { $_ })
+          $pluginAssets = @($assets | Where-Object { $_.name -cmatch '^Markit-citations-\d+\.\d+\.\d+\.markit-plugin$' })
+          if ($pluginAssets.Count -ne 1) { throw 'Expected exactly one citations plugin package.' }
+          $keep += $pluginAssets[0].name
           foreach ($name in $keep) {
             $asset = @($assets | Where-Object name -CEQ $name)
             if ($asset.Count -ne 1 -or $asset[0].size -le 0 -or $asset[0].state -ne 'uploaded') { throw "Required download is missing: $name" }
