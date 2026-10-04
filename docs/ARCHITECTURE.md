@@ -58,3 +58,6 @@ so plugins do not depend on React internals. There is no online marketplace in
 the first release; packages are installed locally. Registered commands are
 shown in the editor toolbar and execute inside the plugin Worker. Registered
 panels appear as isolated sidebar entries and receive no direct DOM access.
+Network access is brokered by the host and currently limited to the local
+Zotero endpoint at `localhost:23119`, with request, timeout and response-size
+limits.

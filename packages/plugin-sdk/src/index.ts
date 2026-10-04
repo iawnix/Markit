@@ -7,7 +7,11 @@ export interface MarkitPluginContext {
   registerPanel(panel: PluginPanel): () => void;
   readDocument(): Promise<DocumentSnapshot | null>;
   updateDocument(source: string): Promise<void>;
+  fetch(url: string, init?: PluginFetchInit): Promise<PluginFetchResponse>;
 }
+
+export interface PluginFetchInit { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string }
+export interface PluginFetchResponse { status: number; headers: Record<string, string>; body: string }
 
 export interface PluginCommand { id: string; title: string; shortcut?: string; run(): void | Promise<void> }
 export interface PluginCommandDescriptor { id: string; title: string; shortcut?: string }

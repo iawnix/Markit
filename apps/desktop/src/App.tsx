@@ -259,6 +259,24 @@ export default function App() {
           setDocuments(current => current.map(item => item.id === activeIdRef.current ? { ...item, source, dirty: source !== item.savedSource } : item));
           return null;
         }
+        if (method === 'network.fetch') {
+          const [rawUrl, rawInit] = args;
+          if (typeof rawUrl !== 'string') throw new Error('Plugin network URL is invalid.');
+          const url = new URL(rawUrl);
+          if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.port !== '23119') throw new Error('Plugin network access is limited to Zotero at localhost:23119.');
+          const init = rawInit && typeof rawInit === 'object' ? rawInit as { method?: string; headers?: Record<string, string>; body?: string } : {};
+          const methodName = init.method || 'GET';
+          if (methodName !== 'GET' && methodName !== 'POST') throw new Error('Plugin network method is not allowed.');
+          if (init.body && init.body.length > 128 * 1024) throw new Error('Plugin request body exceeds the 128 KiB limit.');
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 10_000);
+          try {
+            const response = await fetch(url, { method: methodName, headers: init.headers, body: init.body, signal: controller.signal });
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            if (bytes.byteLength > 8 * 1024 * 1024) throw new Error('Plugin response exceeds the 8 MiB limit.');
+            return { status: response.status, headers: { 'content-type': response.headers.get('content-type') || '' }, body: new TextDecoder().decode(bytes) };
+          } finally { window.clearTimeout(timeout); }
+        }
         if (method === 'commands.register') {
           const descriptor = args[0];
           if (!descriptor || typeof descriptor !== 'object' || typeof (descriptor as { id?: unknown }).id !== 'string' || typeof (descriptor as { title?: unknown }).title !== 'string') throw new Error('Plugin command descriptor is invalid.');

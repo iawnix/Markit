@@ -45,6 +45,7 @@ scope.addEventListener('message', async event => {
         },
         readDocument: () => request('document.read', []),
         updateDocument: (source: string) => request('document.update', [source]),
+        fetch: (url: string, init?: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string }) => request('network.fetch', [url, init || {}]),
       };
       await plugin.activate(context);
       activePlugin = plugin;
