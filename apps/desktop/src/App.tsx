@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
 import { Download, FileText, FolderOpen, ImagePlus, Languages, Menu, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
-import { exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, saveDocument } from './bridge';
+import { clearRecovery, exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
 import { renderHtmlDocument } from '../../../packages/markdown/src/index';
@@ -50,6 +50,7 @@ export default function App() {
   const [pluginCommands, setPluginCommands] = useState<PluginCommandContribution[]>([]);
   const [pluginPanels, setPluginPanels] = useState<PluginPanelContribution[]>([]);
   const [selectedPluginPanel, setSelectedPluginPanel] = useState<PluginPanelContribution | null>(null);
+  const [recoveryLoaded, setRecoveryLoaded] = useState(!isTauriRuntime);
   const active = documents.find(document => document.id === activeId) || null;
   const citationMap = useMemo(() => {
     const panel = pluginPanels.find(item => item.id === 'references');
@@ -69,6 +70,32 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (active) void outline(active.source).then(setHeadings); }, [active?.id, active?.source]);
+  useEffect(() => {
+    if (!isTauriRuntime) return;
+    let cancelled = false;
+    void readRecovery().then(records => {
+      if (cancelled) return;
+      if (records.length && window.confirm(t('recoveryFound'))) {
+        setDocuments(records);
+        setActiveId(records[0].id);
+        const firstPath = records[0].path;
+        if (firstPath) setWorkspace(firstPath.replace(/[\\/][^\\/]+$/, '') || firstPath);
+      } else if (records.length) {
+        void clearRecovery();
+      }
+      setRecoveryLoaded(true);
+    }).catch(() => setRecoveryLoaded(true));
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!recoveryLoaded) return;
+    const recoverable = documents.filter(document => document.dirty || (!document.path && document.source !== document.savedSource));
+    const timer = window.setTimeout(() => {
+      if (recoverable.length) void writeRecovery(recoverable).catch(() => undefined);
+      else void clearRecovery().catch(() => undefined);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [documents, recoveryLoaded]);
   useEffect(() => {
     if (!isTauriRuntime || !active?.path || !active.revision) return;
     const documentId = active.id;

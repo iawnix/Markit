@@ -27,7 +27,7 @@ Linux 构建使用系统 WebKitGTK。AppImage 不包含完整的 Chromium 运行
 - CommonMark/GFM 基础语法、任务列表、表格、代码块和 LaTeX 公式
 - 粘贴、拖拽和批量导入图片，使用相对路径保存
 - UTF-8、BOM、LF/CRLF 和外部文件修改检测
-- 原子保存、未保存状态和崩溃恢复基础设施
+- 原子保存、未保存状态和崩溃恢复
 - HTML 导出
 - 简体中文和 English 界面
 - 本地 `.markit-plugin` 插件包、权限确认和 Worker 隔离

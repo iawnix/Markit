@@ -17,7 +17,10 @@ The durable document format is Markdown. The source editor edits the source
 directly; the ProseMirror schema in `packages/editor` is a semantic projection.
 Unknown blocks remain in the source editor until a lossless projection is
 available. Rust preserves UTF-8 BOM, line endings and file revisions, performs
-atomic saves, and rejects a save when the file changed outside Markit.
+atomic saves, and rejects a save when the file changed outside Markit. Unsaved
+documents are serialized to the Tauri application configuration directory with
+a size limit. On the next launch the host asks whether to restore them; the
+recovery file is removed after dismissal or once all documents are saved.
 
 ## Package boundaries
 

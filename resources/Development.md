@@ -45,6 +45,8 @@ npm test
 
 前端构建结果位于 `dist/desktop`。Tauri 本地构建结果位于 `apps/desktop/src-tauri/target/release/bundle`。
 
+桌面端会把未保存文稿的恢复记录写入 Tauri 应用配置目录。启动时发现恢复记录会先询问是否恢复；选择拒绝或所有文稿保存成功后，记录会被清理。恢复文件只保存当前文稿内容和编辑元数据，不会自动覆盖磁盘文件。
+
 ## Linux 构建
 
 在 Linux x64 环境执行：

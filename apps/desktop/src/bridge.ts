@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DirectoryEntry, DocumentSnapshot, FileRevision, ImageInput, OutlineEntry } from './contracts';
+import type { DirectoryEntry, DocumentSnapshot, FileRevision, ImageInput, OutlineEntry, RecoveryDocument } from './contracts';
 
 export const isTauriRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -27,6 +27,22 @@ export async function saveDocument(path: string, source: string, expected: FileR
 export async function fileRevision(path: string): Promise<FileRevision> {
   if (!isTauriRuntime) return fallback({ hash: '', size: 0, modifiedMs: 0 });
   return invoke<FileRevision>('get_file_revision', { path });
+}
+
+export async function readRecovery(): Promise<RecoveryDocument[]> {
+  if (!isTauriRuntime) return fallback([]);
+  return invoke<RecoveryDocument[]>('read_recovery');
+}
+
+export async function writeRecovery(documents: DocumentSnapshot[]): Promise<void> {
+  if (!isTauriRuntime) return;
+  const records: RecoveryDocument[] = documents.map(({ externalChange: _externalChange, ...document }) => document);
+  await invoke('write_recovery', { documents: records });
+}
+
+export async function clearRecovery(): Promise<void> {
+  if (!isTauriRuntime) return;
+  await invoke('clear_recovery');
 }
 
 export async function exportHtml(path: string, html: string): Promise<void> {

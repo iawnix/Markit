@@ -10,7 +10,7 @@ use std::{
 };
 use tauri::{
     http::{header::CONTENT_TYPE, Response, StatusCode},
-    Emitter, Manager, State,
+    AppHandle, Emitter, Manager, State,
 };
 use uuid::Uuid;
 
@@ -19,6 +19,7 @@ const MAX_EXPORT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_IMAGE_PIXELS: u64 = 256_000_000;
 const MAX_PLUGIN_PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_RECOVERY_BYTES: usize = 64 * 1024 * 1024;
 
 type AssetStore = Arc<RwLock<HashMap<String, PathBuf>>>;
 
@@ -52,6 +53,52 @@ pub struct DocumentSnapshot {
     pub mode: String,
     pub selection: Selection,
     pub scroll_top: f64,
+}
+
+fn recovery_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    Ok(directory.join("recovery.json"))
+}
+
+#[tauri::command]
+fn read_recovery(app: AppHandle) -> Result<Vec<DocumentSnapshot>, String> {
+    let path = recovery_path(&app)?;
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.to_string()),
+    };
+    if bytes.len() > MAX_RECOVERY_BYTES {
+        return Err("Recovery data exceeds the 64 MiB limit".into());
+    }
+    serde_json::from_slice(&bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn write_recovery(app: AppHandle, documents: Vec<DocumentSnapshot>) -> Result<(), String> {
+    if documents.len() > 100 {
+        return Err("Recovery data contains too many documents".into());
+    }
+    let bytes = serde_json::to_vec(&documents).map_err(|error| error.to_string())?;
+    if bytes.len() > MAX_RECOVERY_BYTES {
+        return Err("Recovery data exceeds the 64 MiB limit".into());
+    }
+    let path = recovery_path(&app)?;
+    write_atomic(&path, &bytes)
+}
+
+#[tauri::command]
+fn clear_recovery(app: AppHandle) -> Result<(), String> {
+    let path = recovery_path(&app)?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -551,6 +598,9 @@ pub fn run() {
             read_document,
             save_document,
             get_file_revision,
+            read_recovery,
+            write_recovery,
+            clear_recovery,
             export_html,
             register_asset,
             list_directory,
