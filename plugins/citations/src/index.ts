@@ -80,6 +80,10 @@ function panelItems(items: ZoteroItem[]): Array<{ id: string; title: string; met
   });
 }
 
+function citationNumbers(keys: string[]): Record<string, number> {
+  return Object.fromEntries([...new Set(keys)].map((key, index) => [key, index + 1] as const));
+}
+
 export default {
   activate(context: {
     registerCommand(command: { id: string; title: string; visible?: boolean; run(...args: unknown[]): void | Promise<void> }): () => void;
@@ -87,7 +91,7 @@ export default {
     readDocument(): Promise<{ source: string } | null>;
     updateDocument(source: string): Promise<void>;
     fetch(url: string): Promise<{ status: number; body: string }>;
-    updatePanel(panelId: string, content: { status?: string; items?: unknown[] }): Promise<void>;
+    updatePanel(panelId: string, content: { status?: string; items?: unknown[]; citations?: Record<string, number> }): Promise<void>;
     readSetting(key: string): Promise<string | null>;
     writeSetting(key: string, value: string): Promise<void>;
   }) {
@@ -150,6 +154,8 @@ export default {
         if (document.source.includes(`@${key}`)) return;
         const source = `${document.source.replace(/\s*$/u, '')}\n\n[@${key}]\n`;
         await context.updateDocument(source);
+        const keys = [...new Set([...source.matchAll(/@([A-Z0-9]{8})/gu)].map(match => match[1]))];
+        await context.updatePanel('references', { status: `${keys.length} references in this document.`, items: panelItems([item]), citations: citationNumbers(keys) });
       },
     });
 
@@ -168,11 +174,13 @@ export default {
         const style = citationStyles.numeric;
         const engine = new CSL.Engine({ retrieveLocale: () => citationLocale, retrieveItem: (key: string) => cslData.get(key) }, style, 'en-US');
         engine.updateItems(keys);
+        const citations = citationNumbers(keys);
         const entries = bibliographyText(engine) || keys.map((key, index) => `${index + 1}. ${itemText(byKey.get(key)!)}`).join('\n');
         const block = `${bibliographyMarker}\n\n${entries}\n${bibliographyEndMarker}`;
         const region = new RegExp(`${bibliographyMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[\\s\\S]*?(?:${bibliographyEndMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')})?`, 'u');
         const source = region.test(document.source) ? document.source.replace(region, block) : `${document.source.replace(/\s*$/u, '')}\n\n${block}\n`;
         await context.updateDocument(source);
+        await context.updatePanel('references', { status: `${keys.length} references in this document.`, items: panelItems([...byKey.values()]), citations });
       },
     });
   },

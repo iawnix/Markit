@@ -15,7 +15,7 @@ const ProseMirrorEditor = lazy(() => import('./ProseMirrorEditor').then(module =
 
 type Sidebar = 'files' | 'outline' | 'search' | 'plugin';
 type PluginPanelItem = { id: string; title: string; meta?: string; command?: { id: string; args?: unknown[] } };
-type PluginPanelContent = { status?: string; items?: PluginPanelItem[] };
+type PluginPanelContent = { status?: string; items?: PluginPanelItem[]; citations?: Record<string, number> };
 type PluginCommandContribution = { pluginId: string; id: string; title: string; shortcut?: string; visible?: boolean; host: PluginWorkerHost };
 type PluginPanelContribution = { pluginId: string; id: string; title: string; attribution?: string; searchCommand?: string; content?: PluginPanelContent };
 
@@ -51,6 +51,10 @@ export default function App() {
   const [pluginPanels, setPluginPanels] = useState<PluginPanelContribution[]>([]);
   const [selectedPluginPanel, setSelectedPluginPanel] = useState<PluginPanelContribution | null>(null);
   const active = documents.find(document => document.id === activeId) || null;
+  const citationMap = useMemo(() => {
+    const panel = pluginPanels.find(item => item.id === 'references');
+    return panel?.content?.citations || {};
+  }, [pluginPanels]);
   const t = (key: Parameters<typeof message>[1]) => message(locale, key);
 
   useEffect(() => {
@@ -145,7 +149,7 @@ export default function App() {
   async function exportDocument() {
     if (!active) return;
     const defaultName = `${titleFor(active.path, locale).replace(/\.(md|markdown|mdown|mkd)$/i, '') || 'Markit-export'}.html`;
-    const html = renderHtmlDocument(active.source, titleFor(active.path, locale));
+    const html = renderHtmlDocument(active.source, titleFor(active.path, locale), citationMap);
     try {
       if (!isTauriRuntime) {
         await writeHtml(defaultName, html);
@@ -309,10 +313,14 @@ export default function App() {
         if (method === 'panels.register') {
           const descriptor = args[0];
           if (!descriptor || typeof descriptor !== 'object' || typeof (descriptor as { id?: unknown }).id !== 'string' || typeof (descriptor as { title?: unknown }).title !== 'string') throw new Error('Plugin panel descriptor is invalid.');
-          const panel = descriptor as { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: { status?: string; items?: unknown[] } };
+          const panel = descriptor as { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: { status?: string; items?: unknown[]; citations?: Record<string, number> } };
+          const citations = panel.initialContent?.citations && typeof panel.initialContent.citations === 'object'
+            ? Object.fromEntries(Object.entries(panel.initialContent.citations).filter(([key, value]) => /^[A-Z0-9]{8}$/u.test(key) && Number.isInteger(value) && Number(value) > 0).slice(0, 500))
+            : undefined;
           const initialContent: PluginPanelContent = {
             status: typeof panel.initialContent?.status === 'string' ? panel.initialContent.status.slice(0, 1000) : undefined,
             items: Array.isArray(panel.initialContent?.items) ? panel.initialContent.items.filter((item): item is PluginPanelItem => Boolean(item && typeof item === 'object' && typeof (item as PluginPanelItem).id === 'string' && typeof (item as PluginPanelItem).title === 'string')).slice(0, 100) : [],
+            citations,
           };
           setPluginPanels(current => [...current.filter(item => !(item.pluginId === plugin.manifest.id && item.id === panel.id)), { ...panel, pluginId: plugin.manifest.id, content: initialContent }]);
           return null;
@@ -320,10 +328,14 @@ export default function App() {
         if (method === 'panels.update') {
           const [panelId, rawContent] = args;
           if (typeof panelId !== 'string' || !rawContent || typeof rawContent !== 'object') throw new Error('Plugin panel update is invalid.');
-          const content = rawContent as { status?: unknown; items?: unknown };
+          const content = rawContent as { status?: unknown; items?: unknown; citations?: unknown };
+          const citations = content.citations && typeof content.citations === 'object'
+            ? Object.fromEntries(Object.entries(content.citations).filter(([key, value]) => /^[A-Z0-9]{8}$/u.test(key) && Number.isInteger(value) && Number(value) > 0).slice(0, 500))
+            : undefined;
           const nextContent: PluginPanelContent = {
             status: typeof content.status === 'string' ? content.status.slice(0, 1000) : undefined,
             items: Array.isArray(content.items) ? content.items.filter((item): item is PluginPanelItem => Boolean(item && typeof item === 'object' && typeof (item as PluginPanelItem).id === 'string' && typeof (item as PluginPanelItem).title === 'string')).slice(0, 100) : [],
+            citations,
           };
           setPluginPanels(current => current.map(panel => panel.pluginId === plugin.manifest.id && panel.id === panelId ? { ...panel, content: nextContent } : panel));
           return null;
@@ -390,7 +402,7 @@ export default function App() {
         <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); closeDocument(document.id); }}><X size={13} /></span></button>)}</div>
         {active ? <>
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
-          <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <textarea ref={editorRef} className="source-editor" value={active.source} onChange={event => updateSource(event.target.value)} onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDrop={event => { const files = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} spellCheck={false} /> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} onChange={updateSource} /></Suspense>}</div></div>
+          <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <textarea ref={editorRef} className="source-editor" value={active.source} onChange={event => updateSource(event.target.value)} onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDrop={event => { const files = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} spellCheck={false} /> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} citationMap={citationMap} onChange={updateSource} /></Suspense>}</div></div>
           <footer className="statusbar"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></footer>
         </> : <div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div>}
       </main>

@@ -19,7 +19,7 @@ export interface PluginFetchResponse { status: number; headers: Record<string, s
 export interface PluginCommand { id: string; title: string; shortcut?: string; visible?: boolean; run(...args: unknown[]): void | Promise<void> }
 export interface PluginCommandDescriptor { id: string; title: string; shortcut?: string; visible?: boolean }
 export interface PluginPanelItem { id: string; title: string; meta?: string; command?: { id: string; args?: unknown[] } }
-export interface PluginPanelContent { status?: string; items?: PluginPanelItem[] }
+export interface PluginPanelContent { status?: string; items?: PluginPanelItem[]; citations?: Record<string, number> }
 export interface PluginPanel { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: PluginPanelContent; mount(container: HTMLElement): () => void }
 export interface PluginPanelDescriptor { id: string; title: string; attribution?: string; searchCommand?: string; initialContent?: PluginPanelContent }
 export interface MarkitPlugin { activate(context: MarkitPluginContext): void | Promise<void>; deactivate?(): void | Promise<void> }

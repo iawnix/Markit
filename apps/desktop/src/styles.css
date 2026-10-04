@@ -58,6 +58,8 @@ button { border: 0; cursor: pointer; color: inherit; }
 .pm-editor h1 { padding-bottom: 13px; border-bottom: 1px solid #dfe6df; font-size: 34px; }
 .pm-editor h2 { margin-top: 38px; padding-bottom: 8px; border-bottom: 1px solid #e7ece7; font-size: 25px; }
 .pm-editor blockquote { margin: 18px 0; padding: 7px 17px; border-left: 3px solid #74a887; background: #f1f6f2; color: #637069; }
+.pm-editor .md-citation-source { font-size: 0; line-height: 0; }
+.pm-editor .md-citation-inline { display: inline-block; padding: 1px 5px; border-radius: 4px; background: #eaf1ec; color: #2d6a52; font-size: .78em; line-height: 1.45; vertical-align: .08em; cursor: default; }
 .markdown-preview { color: #29342e; font-size: 16px; line-height: 1.82; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0 0 18px; color: #1d2922; line-height: 1.28; letter-spacing: 0; }
 .markdown-preview h1 { padding-bottom: 13px; border-bottom: 1px solid #dfe6df; font-size: 34px; }

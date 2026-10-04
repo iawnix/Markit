@@ -46,7 +46,7 @@ scope.addEventListener('message', async event => {
         readDocument: () => request('document.read', []),
         updateDocument: (source: string) => request('document.update', [source]),
         fetch: (url: string, init?: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string }) => request('network.fetch', [url, init || {}]),
-        updatePanel: (panelId: string, content: { status?: string; items?: unknown[] }) => request('panels.update', [panelId, content]),
+        updatePanel: (panelId: string, content: { status?: string; items?: unknown[]; citations?: Record<string, number> }) => request('panels.update', [panelId, content]),
         readSetting: (key: string) => request('settings.get', [key]),
         writeSetting: (key: string, value: string) => request('settings.set', [key, value]),
       };

@@ -8,6 +8,28 @@ export interface MarkdownHeading {
 }
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const citationPattern = /^\[(?:@[A-Z0-9]{8})(?:\s*;\s*@[A-Z0-9]{8})*\]/u;
+
+markdown.inline.ruler.before('link', 'markit_citation', (state, silent) => {
+  const match = citationPattern.exec(state.src.slice(state.pos));
+  if (!match) return false;
+  if (!silent) {
+    const token = state.push('markit_citation', 'span', 0);
+    token.content = match[0];
+    token.meta = { keys: [...match[0].matchAll(/@([A-Z0-9]{8})/gu)].map(item => item[1]) };
+  }
+  state.pos += match[0].length;
+  return true;
+});
+markdown.renderer.rules.markit_citation = (tokens, index, _options, env) => {
+  const token = tokens[index];
+  const keys = (token.meta as { keys?: string[] } | undefined)?.keys || [];
+  const citations = (env as { citations?: Record<string, number> } | undefined)?.citations || {};
+  const numbers = keys.map(key => citations[key]).filter((number): number is number => Number.isInteger(number) && number > 0);
+  if (numbers.length !== keys.length) return escapeHtml(token.content);
+  const label = `[${numbers.join(', ')}]`;
+  return `<span class="md-citation-inline" title="${escapeHtml(keys.map(key => `@${key}`).join('; '))}">${label}</span>`;
+};
 
 export function extractHeadings(source: string): MarkdownHeading[] {
   const headings: MarkdownHeading[] = [];
@@ -20,16 +42,16 @@ export function extractHeadings(source: string): MarkdownHeading[] {
   return headings;
 }
 
-export function renderMarkdown(source: string): string {
-  return markdown.render(source);
+export function renderMarkdown(source: string, citations: Record<string, number> = {}): string {
+  return markdown.render(source, { citations });
 }
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
 }
 
-export function renderHtmlDocument(source: string, title: string): string {
-  const body = renderMarkdown(source);
+export function renderHtmlDocument(source: string, title: string, citations: Record<string, number> = {}): string {
+  const body = renderMarkdown(source, citations);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -51,6 +73,7 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 9px; border: 1px solid #dce4dd; text-align: left; }
 th { background: #f3f6f3; }
 a { color: #2c7250; }
+.md-citation-inline { padding: 1px 4px; border-radius: 3px; background: #eaf1ec; color: #2d6a52; font-size: .86em; }
 </style>
 </head>
 <body>
