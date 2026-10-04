@@ -12,7 +12,7 @@ The host exposes Zotero requests through the plugin Worker network broker. The
 broker only permits HTTP GET and POST requests to `localhost:23119` and applies
 fixed request, timeout and response-size limits.
 
-The first package provides a References panel, a command for inserting the
-backward-compatible bibliography marker, and a Zotero connection check. CSL
-rendering, cached reference search and bibliography replacement are being
-migrated into this package next.
+The package provides a References panel, Zotero connection check, citation
+insertion from the first available local item, bibliography marker insertion,
+and bibliography refresh for citation keys in the current Markdown document.
+CSL styling and cached reference search are the next migration step.

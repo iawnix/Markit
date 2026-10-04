@@ -1,4 +1,35 @@
 const bibliographyMarker = '<!-- markedown:bibliography -->';
+const bibliographyEndMarker = '<!-- /markedown:bibliography -->';
+const citationKeyPattern = /^[A-Z0-9]{8}$/;
+
+type ZoteroItem = { key?: string; data?: { key?: string; title?: string; date?: string; creators?: Array<{ creatorType?: string; name?: string; firstName?: string; lastName?: string }> } };
+
+function itemsFrom(body: string): ZoteroItem[] {
+  const value = JSON.parse(body) as unknown;
+  if (Array.isArray(value)) return value as ZoteroItem[];
+  if (value && typeof value === 'object') return [value as ZoteroItem];
+  return [];
+}
+
+function keyFor(item: ZoteroItem): string | null {
+  const key = (item.key || item.data?.key || '').toUpperCase();
+  return citationKeyPattern.test(key) ? key : null;
+}
+
+function itemText(item: ZoteroItem): string {
+  const data = item.data || {};
+  const authors = (data.creators || []).filter(creator => creator.creatorType === 'author' || !creator.creatorType).map(creator => creator.name || [creator.firstName, creator.lastName].filter(Boolean).join(' ')).filter(Boolean).join(', ');
+  const year = (data.date || '').match(/\d{4}/u)?.[0] || 'n.d.';
+  const title = (data.title || 'Untitled').replace(/[\[\]\\]/gu, '\\$&');
+  return `${authors || 'Unknown author'} (${year}). ${title}.`;
+}
+
+async function zoteroItems(context: { fetch(url: string): Promise<{ status: number; body: string }> }, keys?: string[]): Promise<ZoteroItem[]> {
+  const query = keys?.length ? `&itemKey=${encodeURIComponent(keys.join(','))}` : '&limit=20';
+  const response = await context.fetch(`http://127.0.0.1:23119/api/users/0/items?format=json${query}`);
+  if (response.status < 200 || response.status >= 300) throw new Error(`Zotero returned HTTP ${response.status}.`);
+  try { return itemsFrom(response.body); } catch { throw new Error('Zotero returned invalid JSON.'); }
+}
 
 export default {
   activate(context: {
@@ -32,6 +63,40 @@ export default {
       async run() {
         const response = await context.fetch('http://127.0.0.1:23119/api/users/0/items?limit=1');
         if (response.status < 200 || response.status >= 300) throw new Error(`Zotero returned HTTP ${response.status}.`);
+      },
+    });
+
+    context.registerCommand({
+      id: 'insert-zotero-citation',
+      title: 'Insert Zotero citation',
+      async run() {
+        const document = await context.readDocument();
+        if (!document) throw new Error('Open a document before inserting a citation.');
+        const item = (await zoteroItems(context))[0];
+        const key = item && keyFor(item);
+        if (!key) throw new Error('Zotero did not return an eight-character item key.');
+        if (document.source.includes(`@${key}`)) return;
+        const source = `${document.source.replace(/\s*$/u, '')}\n\n[@${key}]\n`;
+        await context.updateDocument(source);
+      },
+    });
+
+    context.registerCommand({
+      id: 'refresh-bibliography',
+      title: 'Refresh bibliography',
+      async run() {
+        const document = await context.readDocument();
+        if (!document) throw new Error('Open a document before refreshing the bibliography.');
+        const keys = [...new Set([...document.source.matchAll(/@([A-Z0-9]{8})/gu)].map(match => match[1]))];
+        if (!keys.length) throw new Error('The document has no supported Zotero citation keys.');
+        const byKey = new Map((await zoteroItems(context, keys)).map(item => [keyFor(item), item] as const));
+        const missing = keys.filter(key => !byKey.has(key));
+        if (missing.length) throw new Error(`Zotero could not resolve: ${missing.join(', ')}.`);
+        const entries = keys.map((key, index) => `${index + 1}. ${itemText(byKey.get(key)!)}`).join('\n');
+        const block = `${bibliographyMarker}\n\n${entries}\n${bibliographyEndMarker}`;
+        const region = new RegExp(`${bibliographyMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[\\s\\S]*?(?:${bibliographyEndMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')})?`, 'u');
+        const source = region.test(document.source) ? document.source.replace(region, block) : `${document.source.replace(/\s*$/u, '')}\n\n${block}\n`;
+        await context.updateDocument(source);
       },
     });
   },
