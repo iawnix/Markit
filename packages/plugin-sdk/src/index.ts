@@ -15,8 +15,8 @@ export interface PluginFetchResponse { status: number; headers: Record<string, s
 
 export interface PluginCommand { id: string; title: string; shortcut?: string; run(): void | Promise<void> }
 export interface PluginCommandDescriptor { id: string; title: string; shortcut?: string }
-export interface PluginPanel { id: string; title: string; mount(container: HTMLElement): () => void }
-export interface PluginPanelDescriptor { id: string; title: string }
+export interface PluginPanel { id: string; title: string; attribution?: string; mount(container: HTMLElement): () => void }
+export interface PluginPanelDescriptor { id: string; title: string; attribution?: string }
 export interface MarkitPlugin { activate(context: MarkitPluginContext): void | Promise<void>; deactivate?(): void | Promise<void> }
 
 export function validateManifest(value: unknown): value is PluginManifest {

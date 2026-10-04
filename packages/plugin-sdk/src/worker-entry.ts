@@ -38,9 +38,9 @@ scope.addEventListener('message', async event => {
           void request('commands.register', [{ id: command.id, title: command.title, shortcut: command.shortcut }]);
           return () => { commands.delete(command.id); void request('commands.unregister', [command.id]); };
         },
-        registerPanel: (panel: { id: string; title: string; mount(container: HTMLElement): () => void }) => {
+        registerPanel: (panel: { id: string; title: string; attribution?: string; mount(container: HTMLElement): () => void }) => {
           panels.add(panel.id);
-          void request('panels.register', [{ id: panel.id, title: panel.title }]);
+          void request('panels.register', [{ id: panel.id, title: panel.title, attribution: panel.attribution }]);
           return () => { panels.delete(panel.id); void request('panels.unregister', [panel.id]); };
         },
         readDocument: () => request('document.read', []),

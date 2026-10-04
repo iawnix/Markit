@@ -15,7 +15,7 @@ const ProseMirrorEditor = lazy(() => import('./ProseMirrorEditor').then(module =
 
 type Sidebar = 'files' | 'outline' | 'search' | 'plugin';
 type PluginCommandContribution = { pluginId: string; id: string; title: string; shortcut?: string; host: PluginWorkerHost };
-type PluginPanelContribution = { pluginId: string; id: string; title: string };
+type PluginPanelContribution = { pluginId: string; id: string; title: string; attribution?: string };
 
 function titleFor(path: string | null, locale: Locale) {
   return path?.split(/[\\/]/).at(-1) || message(locale, 'untitled');
@@ -292,7 +292,7 @@ export default function App() {
         if (method === 'panels.register') {
           const descriptor = args[0];
           if (!descriptor || typeof descriptor !== 'object' || typeof (descriptor as { id?: unknown }).id !== 'string' || typeof (descriptor as { title?: unknown }).title !== 'string') throw new Error('Plugin panel descriptor is invalid.');
-          const panel = descriptor as { id: string; title: string };
+          const panel = descriptor as { id: string; title: string; attribution?: string };
           setPluginPanels(current => [...current.filter(item => !(item.pluginId === plugin.manifest.id && item.id === panel.id)), { ...panel, pluginId: plugin.manifest.id }]);
           return null;
         }
@@ -346,7 +346,7 @@ export default function App() {
           {sidebar === 'files' && <><div className="sidebar-heading"><span>{t('files')}</span><span><button className="icon-button" title="Open folder" aria-label="Open folder" onClick={() => void chooseWorkspace()}><FolderOpen size={15} /></button><button className="icon-button" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={15} /></button></span></div><p className="workspace-path">{workspace || 'Local workspace'}</p>{entries.filter(entry => !entry.directory && /\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)).map(entry => <button key={entry.path} className={`file-row ${active?.path === entry.path ? 'active' : ''}`} onClick={() => void openPath(entry.path)}><FileText size={15} /><span>{entry.name}</span></button>)}{!entries.length && <button className="file-row active" onClick={() => void chooseDocument()}><FileText size={15} /><span>{active ? titleFor(active.path, locale) : t('emptyTitle')}</span></button>}</>}
           {sidebar === 'outline' && <><div className="sidebar-heading"><span>{t('outline')}</span><span className="count">{headings.length}</span></div>{filteredHeadings.length ? <nav className="outline-list">{filteredHeadings.map(item => <button key={item.id} style={{ paddingLeft: `${12 + item.level * 10}px` }} onClick={() => jumpToHeading(item)}>{item.text}</button>)}</nav> : <p className="empty-sidebar">{t('noOutline')}</p>}</>}
           {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span></div><input className="sidebar-search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('search')} />{query && <p className="empty-sidebar">{active?.source.toLowerCase().includes(query.toLowerCase()) ? '1 match' : 'No matches'}</p>}</>}
-          {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div><p className="plugin-panel-status">{t('pluginPanelReady')}</p><p className="plugin-panel-provider">{t('pluginPanelProvider')}: {selectedPluginPanel.pluginId}</p></div>}
+          {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div><p className="plugin-panel-status">{t('pluginPanelReady')}</p><p className="plugin-panel-provider">{t('pluginPanelProvider')}: {selectedPluginPanel.pluginId}</p>{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
         </div>
       </aside>
       <main className="main-panel">

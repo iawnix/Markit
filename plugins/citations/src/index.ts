@@ -1,3 +1,6 @@
+import CSL from 'citeproc';
+import { citationLocale, citationStyles } from '../../../src/shared/citation-styles';
+
 const bibliographyMarker = '<!-- markedown:bibliography -->';
 const bibliographyEndMarker = '<!-- /markedown:bibliography -->';
 const citationKeyPattern = /^[A-Z0-9]{8}$/;
@@ -24,6 +27,19 @@ function itemText(item: ZoteroItem): string {
   return `${authors || 'Unknown author'} (${year}). ${title}.`;
 }
 
+function cslItem(item: ZoteroItem, key: string): Record<string, unknown> {
+  const data = item.data || {};
+  const creators = (data.creators || []).filter(creator => creator.creatorType === 'author' || !creator.creatorType).map(creator => creator.name ? { literal: creator.name } : { given: creator.firstName || '', family: creator.lastName || '' });
+  const year = (data.date || '').match(/\d{4}/u)?.[0];
+  return { id: key, type: 'article-journal', title: data.title || 'Untitled', author: creators, issued: year ? { 'date-parts': [[Number(year)]] } : undefined };
+}
+
+function bibliographyText(engine: { makeBibliography(): [unknown, Array<string>] | undefined }): string {
+  const bibliography = engine.makeBibliography();
+  if (!bibliography) return '';
+  return bibliography[1].map((entry, index) => `${index + 1}. ${entry.replace(/<[^>]*>/gu, '').replace(/&amp;/gu, '&').replace(/&lt;/gu, '<').replace(/&gt;/gu, '>').trim()}`).join('\n');
+}
+
 async function zoteroItems(context: { fetch(url: string): Promise<{ status: number; body: string }> }, keys?: string[]): Promise<ZoteroItem[]> {
   const query = keys?.length ? `&itemKey=${encodeURIComponent(keys.join(','))}` : '&limit=20';
   const response = await context.fetch(`http://127.0.0.1:23119/api/users/0/items?format=json${query}`);
@@ -34,7 +50,7 @@ async function zoteroItems(context: { fetch(url: string): Promise<{ status: numb
 export default {
   activate(context: {
     registerCommand(command: { id: string; title: string; run(): void | Promise<void> }): () => void;
-    registerPanel(panel: { id: string; title: string; mount(container: HTMLElement): () => void }): () => void;
+    registerPanel(panel: { id: string; title: string; attribution?: string; mount(container: HTMLElement): () => void }): () => void;
     readDocument(): Promise<{ source: string } | null>;
     updateDocument(source: string): Promise<void>;
     fetch(url: string): Promise<{ status: number; body: string }>;
@@ -42,6 +58,7 @@ export default {
     context.registerPanel({
       id: 'references',
       title: 'References',
+      attribution: '(c) Frank Bennett · citeproc-js implements the Citation Style Language · https://citationstyles.org/',
       mount() { return () => {}; },
     });
 
@@ -92,7 +109,11 @@ export default {
         const byKey = new Map((await zoteroItems(context, keys)).map(item => [keyFor(item), item] as const));
         const missing = keys.filter(key => !byKey.has(key));
         if (missing.length) throw new Error(`Zotero could not resolve: ${missing.join(', ')}.`);
-        const entries = keys.map((key, index) => `${index + 1}. ${itemText(byKey.get(key)!)}`).join('\n');
+        const cslData = new Map(keys.map(key => [key, cslItem(byKey.get(key)!, key)] as const));
+        const style = citationStyles.numeric;
+        const engine = new CSL.Engine({ retrieveLocale: () => citationLocale, retrieveItem: (key: string) => cslData.get(key) }, style, 'en-US');
+        engine.updateItems(keys);
+        const entries = bibliographyText(engine) || keys.map((key, index) => `${index + 1}. ${itemText(byKey.get(key)!)}`).join('\n');
         const block = `${bibliographyMarker}\n\n${entries}\n${bibliographyEndMarker}`;
         const region = new RegExp(`${bibliographyMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[\\s\\S]*?(?:${bibliographyEndMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')})?`, 'u');
         const source = region.test(document.source) ? document.source.replace(region, block) : `${document.source.replace(/\s*$/u, '')}\n\n${block}\n`;

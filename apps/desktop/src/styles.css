@@ -107,4 +107,5 @@ button { border: 0; cursor: pointer; color: inherit; }
 .plugin-panel { padding: 2px 0; }
 .plugin-panel-status { margin: 18px 7px 6px; color: #526056; font-size: 12px; }
 .plugin-panel-provider { margin: 0 7px; color: #9aa59d; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.plugin-panel-attribution { margin: 18px 7px 0; padding-top: 12px; border-top: 1px solid #e7ebe6; color: #8b958e; font-size: 10px; line-height: 1.55; overflow-wrap: anywhere; }
 @media (max-width: 900px) { body { min-width: 0; } .sidebar { width: 210px; } .editor-column { width: min(860px, calc(100% - 40px)); } .brand { min-width: 90px; } }
