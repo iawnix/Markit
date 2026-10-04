@@ -11,6 +11,8 @@ import { requiresPrompt } from '../../../packages/plugin-sdk/src/permissions';
 import { PluginRegistry, type InstalledPlugin } from '../../../packages/plugin-sdk/src/registry';
 import { loadPluginEntry, removePluginEntry, savePluginEntry } from '../../../packages/plugin-sdk/src/package-store';
 import { PluginWorkerHost } from '../../../packages/plugin-sdk/src/worker-host';
+import type { SourceEditorHandle } from './CodeMirrorEditor';
+const CodeMirrorEditor = lazy(() => import('./CodeMirrorEditor').then(module => ({ default: module.CodeMirrorEditor })));
 const ProseMirrorEditor = lazy(() => import('./ProseMirrorEditor').then(module => ({ default: module.ProseMirrorEditor })));
 
 type Sidebar = 'files' | 'outline' | 'search' | 'plugin';
@@ -39,7 +41,7 @@ export default function App() {
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [query, setQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<SourceEditorHandle>(null);
   const documentsRef = useRef<DocumentSnapshot[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pluginInputRef = useRef<HTMLInputElement>(null);
@@ -224,7 +226,7 @@ export default function App() {
     const index = headings.indexOf(item);
     if (active?.mode === 'source' && editorRef.current) {
       editorRef.current.focus();
-      editorRef.current.setSelectionRange(item.offset, item.offset);
+      editorRef.current.setSelection(item.offset);
       return;
     }
     const heading = document.querySelector('.pm-editor')?.querySelectorAll('h1, h2, h3, h4, h5, h6').item(index);
@@ -233,12 +235,11 @@ export default function App() {
 
   async function insertImages(files: File[]) {
     if (!active?.path || !files.length) return;
+    const position = editorRef.current?.getSelectionStart() ?? active.source.length;
     try {
       const inputs: ImageInput[] = await Promise.all(files.slice(0, 100).map(async file => ({ name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })));
       const destinations = await writeImages(active.path!, inputs);
       const insertion = destinations.map(destination => `![](<${destination.replace(/[<>\n]/g, character => encodeURIComponent(character))}>)`).join('\n');
-      const element = editorRef.current;
-      const position = element?.selectionStart ?? active.source.length;
       const source = active.source.slice(0, position) + (position && !/\n$/.test(active.source.slice(0, position)) ? '\n' : '') + insertion + '\n' + active.source.slice(position);
       updateSource(source);
     } catch (error) { window.alert(String(error)); }
@@ -458,7 +459,7 @@ export default function App() {
         {active ? <>
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
-          <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <textarea ref={editorRef} className="source-editor" value={active.source} onChange={event => updateSource(event.target.value)} onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDrop={event => { const files = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} spellCheck={false} /> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} citationMap={citationMap} onChange={updateSource} /></Suspense>}</div></div>
+          <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} source={active.source} onChange={updateSource} onImageFiles={files => { void insertImages(files); }} /></Suspense> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} citationMap={citationMap} onChange={updateSource} /></Suspense>}</div></div>
           <footer className="statusbar"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></footer>
         </> : <div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div>}
       </main>

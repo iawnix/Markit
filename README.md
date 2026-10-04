@@ -23,6 +23,7 @@ Linux 构建使用系统 WebKitGTK。AppImage 不包含完整的 Chromium 运行
 ## 核心功能
 
 - 即时排版和 Markdown 源码编辑模式
+- 源码模式使用 CodeMirror 6，支持 Markdown 高亮、撤销重做和行换行
 - 标题大纲、章节跳转、标签页和工作区文件浏览
 - CommonMark/GFM 基础语法、任务列表、表格、代码块和 LaTeX 公式
 - 粘贴、拖拽和批量导入图片，使用相对路径保存

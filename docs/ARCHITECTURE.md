@@ -13,7 +13,7 @@ search and platform integration. The UI communicates with Rust only through
 typed Tauri commands and events. It never receives Node APIs or arbitrary file
 URLs.
 
-The durable document format is Markdown. The source editor edits the source
+The durable document format is Markdown. CodeMirror 6 edits the source
 directly; the ProseMirror schema in `packages/editor` is a semantic projection.
 Unknown blocks remain in the source editor until a lossless projection is
 available. Rust preserves UTF-8 BOM, line endings and file revisions, performs

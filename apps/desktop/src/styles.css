@@ -53,6 +53,12 @@ button { border: 0; cursor: pointer; color: inherit; }
 .editor-scroll { min-height: 0; flex: 1; overflow: auto; }
 .editor-column { width: min(860px, calc(100% - 80px)); min-height: 100%; margin: 0 auto; padding: 56px 0 100px; }
 .source-editor { width: 100%; min-height: calc(100vh - 190px); resize: none; border: 0; outline: 0; background: transparent; color: #29342e; font-family: "SFMono-Regular", Consolas, monospace; font-size: 14px; line-height: 1.75; tab-size: 2; }
+.source-editor-codemirror { width: 100%; min-height: calc(100vh - 190px); }
+.source-editor-codemirror .cm-editor { min-height: calc(100vh - 190px); outline: 0; background: transparent; color: #29342e; font: 14px/1.75 "SFMono-Regular", Consolas, monospace; }
+.source-editor-codemirror .cm-scroller { overflow: auto; }
+.source-editor-codemirror .cm-content { min-height: calc(100vh - 250px); padding: 0; caret-color: #2d6a52; }
+.source-editor-codemirror .cm-gutters { border: 0; background: transparent; color: #a1aaa3; }
+.source-editor-codemirror .cm-activeLine, .source-editor-codemirror .cm-activeLineGutter { background: #f5f8f5; }
 .live-editor { min-height: 480px; cursor: text; }
 .pm-editor { min-height: 480px; outline: 0; color: #29342e; font-size: 16px; line-height: 1.82; }
 .pm-editor .ProseMirror { min-height: 480px; outline: 0; }
