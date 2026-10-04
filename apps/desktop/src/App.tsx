@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
-import { Download, FileText, FolderOpen, ImagePlus, Languages, Menu, PanelLeft, Play, Plus, Puzzle, Save, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
-import { exportHtml as writeHtml, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, saveDocument } from './bridge';
+import { Download, FileText, FolderOpen, ImagePlus, Languages, Menu, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, saveDocument } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
 import { renderHtmlDocument } from '../../../packages/markdown/src/index';
@@ -69,6 +69,26 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (active) void outline(active.source).then(setHeadings); }, [active?.id, active?.source]);
+  useEffect(() => {
+    if (!isTauriRuntime || !active?.path || !active.revision) return;
+    const documentId = active.id;
+    const path = active.path;
+    const expected = active.revision;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const current = await fileRevision(path);
+        if (cancelled) return;
+        const changed = current.hash !== expected.hash || current.size !== expected.size || current.modifiedMs !== expected.modifiedMs;
+        setDocuments(documents => documents.map(document => document.id === documentId ? { ...document, externalChange: changed } : document));
+      } catch {
+        // A deleted or temporarily inaccessible file is reported when saving.
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, 2500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [active?.id, active?.path, active?.revision?.hash, active?.revision?.size, active?.revision?.modifiedMs]);
   useEffect(() => { localStorage.setItem('markit.locale', locale); document.documentElement.lang = locale; }, [locale]);
   useEffect(() => { documentsRef.current = documents; }, [documents]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
@@ -142,7 +162,15 @@ export default function App() {
         path = selected;
       }
       const revision = await saveDocument(path, active.source, active.path ? active.revision : null, active.bom, active.lineEnding);
-      setDocuments(current => current.map(item => item.id === active.id ? { ...item, path, title: titleFor(path, locale), savedSource: item.source, dirty: false, revision } : item));
+      setDocuments(current => current.map(item => item.id === active.id ? { ...item, path, title: titleFor(path, locale), savedSource: item.source, dirty: false, revision, externalChange: false } : item));
+    } catch (error) { window.alert(String(error)); }
+  }
+
+  async function reloadActiveDocument() {
+    if (!active?.path) return;
+    try {
+      const fresh = await readDocument(active.path);
+      setDocuments(current => current.map(item => item.id === active.id ? { ...fresh, id: item.id, mode: item.mode, externalChange: false } : item));
     } catch (error) { window.alert(String(error)); }
   }
 
@@ -402,6 +430,7 @@ export default function App() {
         <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); closeDocument(document.id); }}><X size={13} /></span></button>)}</div>
         {active ? <>
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
+          {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
           <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <textarea ref={editorRef} className="source-editor" value={active.source} onChange={event => updateSource(event.target.value)} onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDrop={event => { const files = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void insertImages(files); } }} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} spellCheck={false} /> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} citationMap={citationMap} onChange={updateSource} /></Suspense>}</div></div>
           <footer className="statusbar"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></footer>
         </> : <div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div>}

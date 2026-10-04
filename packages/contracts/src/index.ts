@@ -2,7 +2,7 @@ export interface FileRevision { hash: string; size: number; modifiedMs: number }
 export interface Selection { anchor: number; head: number }
 export interface DocumentSnapshot {
   id: string; path: string | null; title: string; source: string; savedSource: string;
-  dirty: boolean; revision: FileRevision | null; bom: boolean; lineEnding: 'LF' | 'CRLF'; mode: 'source' | 'live'; selection: Selection; scrollTop: number;
+  dirty: boolean; revision: FileRevision | null; bom: boolean; lineEnding: 'LF' | 'CRLF'; mode: 'source' | 'live'; selection: Selection; scrollTop: number; externalChange?: boolean;
 }
 export interface DirectoryEntry { name: string; path: string; directory: boolean }
 export interface OutlineEntry { id: string; text: string; level: number; offset: number }

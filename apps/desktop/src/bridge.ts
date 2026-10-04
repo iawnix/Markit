@@ -24,6 +24,11 @@ export async function saveDocument(path: string, source: string, expected: FileR
   return invoke<FileRevision>('save_document', { path, source, expected, bom, lineEnding });
 }
 
+export async function fileRevision(path: string): Promise<FileRevision> {
+  if (!isTauriRuntime) return fallback({ hash: '', size: 0, modifiedMs: 0 });
+  return invoke<FileRevision>('get_file_revision', { path });
+}
+
 export async function exportHtml(path: string, html: string): Promise<void> {
   if (!isTauriRuntime) {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });

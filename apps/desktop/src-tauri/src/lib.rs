@@ -253,6 +253,13 @@ fn save_document(
     revision(&path, &bytes)
 }
 
+#[tauri::command]
+fn get_file_revision(path: String) -> Result<FileRevision, String> {
+    let path = validate_local_path(&path)?;
+    let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+    revision(&path, &bytes)
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let temporary = path.with_file_name(format!(
         ".{}.{}.tmp",
@@ -543,6 +550,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_document,
             save_document,
+            get_file_revision,
             export_html,
             register_asset,
             list_directory,

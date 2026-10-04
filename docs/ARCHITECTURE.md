@@ -1,9 +1,9 @@
 # Markit Architecture
 
-Markit uses Tauri 2 as its desktop entrypoint. React and TypeScript live in
+Markit uses Tauri 2 as its only desktop entrypoint. React and TypeScript live in
 `apps/desktop`, while Rust owns privileged and platform-specific operations.
-The previous Electron entrypoint remains in the repository only as a migration
-reference; new desktop features target Tauri.
+The repository is maintained as an independent project; new desktop features
+target Tauri and do not add a second desktop runtime.
 
 ## Runtime boundary
 
@@ -13,9 +13,11 @@ search and platform integration. The UI communicates with Rust only through
 typed Tauri commands and events. It never receives Node APIs or arbitrary file
 URLs.
 
-The durable document format is Markdown. CodeMirror edits the source directly;
-the ProseMirror schema in `packages/editor` is a semantic projection. Unknown
-blocks remain in the source editor until a lossless projection is available.
+The durable document format is Markdown. The source editor edits the source
+directly; the ProseMirror schema in `packages/editor` is a semantic projection.
+Unknown blocks remain in the source editor until a lossless projection is
+available. Rust preserves UTF-8 BOM, line endings and file revisions, performs
+atomic saves, and rejects a save when the file changed outside Markit.
 
 ## Package boundaries
 
@@ -23,7 +25,8 @@ blocks remain in the source editor until a lossless projection is available.
 - `packages/markdown`: heading extraction and rendering primitives.
 - `packages/editor`: ProseMirror projection and source range operations.
 - `packages/plugin-sdk`: manifest, permission and host API types.
-- `plugins/citations`: planned optional Zotero/CSL integration.
+- `plugins/citations`: optional Zotero/CSL integration, packaged separately
+  from the core application.
 
 ## Local development
 
@@ -60,4 +63,6 @@ shown in the editor toolbar and execute inside the plugin Worker. Registered
 panels appear as isolated sidebar entries and receive no direct DOM access.
 Network access is brokered by the host and currently limited to the local
 Zotero endpoint at `localhost:23119`, with request, timeout and response-size
-limits.
+limits. The citations plugin uses this boundary for Zotero search and cache
+updates, and exposes citation-number mappings to the live editor and HTML
+exporter without moving citation metadata into Markdown storage.

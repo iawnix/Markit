@@ -48,6 +48,8 @@ button { border: 0; cursor: pointer; color: inherit; }
 .toolbar-spacer { flex: 1; }
 .mode-switch { padding: 5px 9px; background: transparent; color: #89938c; }
 .mode-switch.selected { background: #eaf1ec; color: #2d6a52; font-weight: 600; }
+.external-change { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; padding: 6px 18px 6px 20px; border-bottom: 1px solid #ead6b7; background: #fff8eb; color: #7a5b2c; font-size: 12px; }
+.external-change .secondary-command { flex: 0 0 auto; margin: 0; padding: 5px 8px; border-color: #e5c995; background: transparent; color: #7a5b2c; }
 .editor-scroll { min-height: 0; flex: 1; overflow: auto; }
 .editor-column { width: min(860px, calc(100% - 80px)); min-height: 100%; margin: 0 auto; padding: 56px 0 100px; }
 .source-editor { width: 100%; min-height: calc(100vh - 190px); resize: none; border: 0; outline: 0; background: transparent; color: #29342e; font-family: "SFMono-Regular", Consolas, monospace; font-size: 14px; line-height: 1.75; tab-size: 2; }
