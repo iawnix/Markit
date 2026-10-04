@@ -1,153 +1,98 @@
 # Markit
 
-面向日常记录与论文写作的 Windows、macOS 与 Linux Markdown 编辑器。
+Markit 是一款轻量、跨平台的本地 Markdown 写作工具，面向研究笔记、技术文档和日常写作。它使用 Tauri 2、Rust、React、TypeScript 和 Vite 构建，文稿始终以 Markdown 源文件保存。
 
-Markit 将即时排版、公式编号和多格式导出放在同一个写作环境中。文稿以本地 Markdown 文件保存，可随时切换到源码模式继续编辑。文献管理和其他重型能力作为可选插件，不会在核心启动时加载。
+Markit 的核心编辑体验包含即时排版、源码模式、文档大纲、标签页、工作区文件浏览、相对路径图片和 HTML 导出。参考文献、Zotero 和其他重型能力通过可选插件提供，核心启动时不会加载这些功能。
 
-**[下载最新版](https://github.com/iawnix/Markit/releases/latest)** · [学术写作指南](resources/AcademicWriting.md) · [构建说明](resources/Development.md) · [反馈问题](https://github.com/iawnix/Markit/issues)
+项目主页：[github.com/iawnix/markit](https://github.com/iawnix/markit)
 
-![Markit 编辑界面：研究笔记、公式编号与大纲](resources/images/editor.png)
+## 当前状态
 
-## 下载与安装
+项目正在进行独立重构。桌面基础工程、文件服务、Tauri 命令桥接、Markdown 编辑器、插件运行时和 citations 插件已经可以开发和验证；安装包发布、更多语义编辑能力和跨发行版验收仍在持续完善。
 
-当前发布版本：**0.4.0**，提供 Windows、macOS 与 Linux x64 构建。Linux x64 支持 AppImage、DEB、RPM 和 tar.gz：Ubuntu/Debian 使用 DEB，Fedora/RHEL 使用 RPM，Manjaro/Arch 使用 AppImage 或 tar.gz。Linux 包依赖系统 WebKitGTK 运行时。
+当前首发目标为 Windows、macOS 和 Linux x64：
 
-| 版本 | 下载 | 使用方式 |
-| --- | --- | --- |
-| Windows 安装版 | [Windows x64 EXE](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Windows-x64-Setup.exe) | 运行安装程序，按提示选择安装目录 |
-| Windows ZIP | [Windows x64 ZIP](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Windows-x64.zip) | 解压后运行 `Markit.exe`，需要系统 WebView2 |
-| macOS | [macOS x64 DMG](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-macOS-x64.dmg) | 打开 DMG 后将 Markit 拖入 Applications |
-| Ubuntu/Debian | [Linux x64 DEB](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.deb) | 使用 `sudo apt install ./Markit-0.4.0-Linux-x64.deb` |
-| Fedora/RHEL | [Linux x64 RPM](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.rpm) | 使用 `sudo dnf install ./Markit-0.4.0-Linux-x64.rpm` |
-| Manjaro/Arch | [Linux x64 tar.gz](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.tar.gz) | 解压后运行 `markit` |
-| 其他 Linux | [Linux x64 AppImage](https://github.com/iawnix/Markit/releases/download/v0.4.0/Markit-0.4.0-Linux-x64.AppImage) | 添加执行权限后直接运行 |
-| 源码 | [Source code (zip)](https://github.com/iawnix/Markit/archive/refs/tags/v0.4.0.zip) | GitHub 按版本标签生成，包含源码、依赖锁文件、测试和中文说明 |
+- Windows：NSIS 安装包和 ZIP
+- macOS：DMG
+- Ubuntu/Debian：DEB
+- Fedora/RHEL：RPM
+- Manjaro/Arch 及其他 Linux：AppImage 和 tar.gz
 
-安装程序会添加 Markdown 文件的“打开方式”选项，不会强制修改默认应用。便携版需保留同目录的 `portable.json` 及其余程序文件。
+Linux 构建使用系统 WebKitGTK。AppImage 不包含完整的 Chromium 运行时，使用前请确保系统具备对应的 WebKitGTK/GTK3 依赖。
 
-当前发行包未签名。[发布页](https://github.com/iawnix/Markit/releases/tag/v0.4.0)提供更新说明和各平台发行包。许可证和依赖说明随程序包与源码提供，不再作为单独的发布附件。
+## 核心功能
 
-### 更新已有版本
+- 即时排版和 Markdown 源码编辑模式
+- 标题大纲、章节跳转、标签页和工作区文件浏览
+- CommonMark/GFM 基础语法、任务列表、表格、代码块和 LaTeX 公式
+- 粘贴、拖拽和批量导入图片，使用相对路径保存
+- UTF-8、BOM、LF/CRLF 和外部文件修改检测
+- 原子保存、未保存状态和崩溃恢复基础设施
+- HTML 导出
+- 简体中文和 English 界面
+- 本地 `.markit-plugin` 插件包、权限确认和 Worker 隔离
 
-更新前保存文稿并退出 Markit。
+## 可选插件
 
-- **安装版**：下载新版 EXE，安装到原目录，无需先卸载。设置与恢复数据保存在用户应用数据目录。
-- **便携版**：将新版解压到新目录，把旧版的 `data` 目录复制到新版目录中，再启动新版。另行存放的文稿和图片仍在原位置。
+Markit 核心不依赖 Zotero、citeproc、CSL 或 Mermaid。插件可以注册命令、侧栏面板、文档变换和导出入口，但必须通过宿主 API 请求文件、网络和设置访问。
 
-目前采用手动更新，可在[最新发布页](https://github.com/iawnix/Markit/releases/latest)获取新版本。
+当前提供的 citations 插件支持：
 
-## 主要功能
+- 连接本机 Zotero API
+- 搜索和缓存 Zotero 条目
+- 插入 `[@KEY]` 引用
+- 生成 bibliography 标记和编号列表
+- 在即时排版和 HTML 导出中显示引用编号
 
-- **编辑与排版**：即时排版和源码模式；标题、列表、任务列表、表格、代码高亮、删除线、高亮、上下标及 LaTeX 公式。表格在即时排版中只读显示，内容和结构请切换到源码模式编辑。
-- **文稿与工作区**：多标签、多窗口、独立撤销记录、侧栏文件单击打开、文件夹浏览、大纲定位、全文搜索及查找替换。
-- **专注写作**：专注模式、打字机模式、字数统计、阅读宽度与字体设置、自定义快捷键。
-- **主题与偏好**：内建 Github、Newsprint、Night、Pixyll、Whitey 五种主题，数字使用等高字形，支持深浅色外观和可搜索的分类设置。
-- **本地图片**：粘贴、拖入或批量选择图片；默认写入文稿旁的 `assets`，大图使用缓存缩略图预览，保留原图。
-- **保存与恢复**：自动保存、异常退出恢复、外部修改冲突提示，以及 UTF-8 BOM、LF/CRLF 格式保留。
+插件包格式、权限模型和开发接口见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) 与 [`plugins/citations/README.md`](plugins/citations/README.md)。
 
-打开、保存和导出位于 **文件** 菜单，文本格式位于 **编辑 → 格式**，偏好设置位于 **编辑 → 偏好设置**（`Ctrl+,`）。
+## 从源码运行
 
-右键文稿标签可选择 **打开新窗口**、**关闭** 或 **关闭其他标签**。将标签拖离标签条后松开，也可移到独立窗口；按 `Esc` 取消拖动。移窗保留未保存内容、撤销/重做、选区、滚动位置和编辑模式；关闭其他标签仅作用于当前窗口，取消保存确认会保留全部标签。
-
-## 论文写作
-
-### 公式编号与交叉引用
-
-通过 **编辑 → 格式 → 行间公式** 插入公式，默认自动编号。行间公式默认左对齐，编号在右侧并相对公式整体垂直居中；**偏好设置 → Markdown → 数学公式** 可选择公式左对齐、居中或右对齐，以及编号在左侧或右侧。通过 **编辑 → 学术引用 → 文档编号设置** 可为当前文稿单独设置编号前缀；论文补充材料输入 `S` 后自动生成 `S1`、`S2` 等编号，手动 `\\tag{…}` 编号保持不变。
-
-较长公式可通过底部滚动条横向查看。拖动或点击滚动条时保留文稿源码与选区；点击公式内容可进入源码编辑。
-
-为行间公式或行内公式添加标签，即可在正文引用。编号支持全文连续或按一级标题分章，也可只为带标签的公式编号。段落中的公式可通过 **编辑 → 格式 → 行内公式** 插入。
-
-顶层正文段落仅包含一个 `$…$` 或 `\(…\)` 时，默认按行间公式排版并遵循当前编号设置；可在同一设置分组关闭 **独占段落的行内公式按行间公式处理**。正文夹排、标题、列表、引用和表格中的行内公式保持原样，Markdown 源码不改写。
-
-表格默认使用科研三线表（顶线、表头线、底线）。在 **偏好设置 → Markdown → Markdown 语法偏好 → 表格样式** 中可切换为网格表或简洁横线表；样式同时用于即时排版和 HTML/PDF/PNG 导出。即时排版中的表格只读，双击、Enter/F2、Tab 和右键不会进入单元格或行列编辑；需要修改表格内容或结构时请切换到源码模式，所有 Markdown 变更仍可撤销。
-
-```markdown
-能量关系见 \eqref{eq:energy}。
-
-$$
-E = mc^2 \label{eq:energy}
-$$
-
-行内比值 $\eta = E/E_0\label{eq:ratio}$ 也可通过 \eqref{eq:ratio} 引用。
-```
-
-支持 `\eqref{eq:energy}`、`\ref{eq:energy}` 和 `[@eq:energy]` 三种引用写法。增删前文公式后，引用编号随之更新；按住 `Ctrl` 点击引用可定位目标公式。也可通过 **编辑 → 学术引用** 插入标签、引用，或打开“文档编号设置”快速调整编号前缀。
-
-### 文献插件
-
-核心版本不会默认连接 Zotero，也不会初始化 citeproc、CSL 样式或参考文献面板。文献管理会通过独立的 `plugins/citations` 插件提供；设置中的插件管理器支持安装本地 `.markit-plugin` 包、查看权限并在启用高风险权限前确认。旧文稿中的 `markedown:bibliography` 标记将由兼容插件识别。
-
-公式编号、交叉引用和文档大纲属于核心功能。更多写作用法见[学术写作指南](resources/AcademicWriting.md)与[示例文稿](resources/AcademicExample.md)。
-
-## 导入与导出
-
-导出使用当前编辑内容，包括尚未保存的修改。
-
-| 方式 | 格式 |
-| --- | --- |
-| 内建导出 | HTML、无样式 HTML、PDF（A4 / Letter）、长图 PNG |
-| Pandoc 导出 | Word（DOCX）、EPUB、LaTeX、RTF、ODT、MediaWiki、reStructuredText、Textile、OPML |
-| Pandoc 导入 | DOCX、ODT、EPUB、HTML、reStructuredText、Textile、OPML |
-
-使用扩展格式时，需安装 [Pandoc](https://pandoc.org/installing.html)。Markit 会检查 `PATH` 和常见安装目录，也可在偏好设置中指定 `pandoc.exe`。内建导出无需 Pandoc。
-
-**偏好设置 → 导出 → Word** 可设置中西文字体、颜色、正文和各级标题样式。Word 公式以原生可编辑数学对象导出；公式编号和参考文献列表保留导出时的结果，不是 Word 自动编号域或引文管理器记录。
-
-LaTeX、RST、Textile、MediaWiki 等文本导出会生成相邻的 `markedown-assets-*` 图片目录，移动导出文件时需一并携带。
-
-## 文稿与数据
-
-文稿保存在你选择的位置。图片采用相对路径时，移动文稿也需要同时移动对应图片目录；未保存文稿在首次导入图片时会提示选择保存位置。
-
-| 数据 | 位置 |
-| --- | --- |
-| Windows 安装版设置、恢复记录与缓存 | 通常为 `%APPDATA%\Markit` |
-| Windows ZIP 设置、恢复记录与缓存 | 通常为 `%APPDATA%\\Markit` |
-| Linux 设置、恢复记录与缓存 | 通常为 `~/.config/Markit`，或 `XDG_CONFIG_HOME` 指定的位置 |
-| 默认图片目录 | 文稿旁的 `assets`，可在图像设置中调整 |
-
-恢复的文稿需要先手动保存一次，才会重新启用自动写回。遇到外部修改冲突时，可重新加载、另存副本或取消。撤销图片插入会撤销文稿中的 Markdown 文本，已写入的图片文件仍保留。
-
-预览默认阻止远程图片，文稿中的脚本不会执行。HTML 导出可单独允许远程图片；PDF、PNG 和 Pandoc 导出使用本地图片。
-
-## 常用快捷键
-
-| 操作 | 快捷键 |
-| --- | --- |
-| 新文稿 / 新窗口 | `Ctrl+N` / `Ctrl+Shift+N` |
-| 打开文稿 / 文件夹 | `Ctrl+O` / `Ctrl+Shift+O` |
-| 保存 / 另存为 | `Ctrl+S` / `Ctrl+Shift+S` |
-| 查找 / 替换 | `Ctrl+F` / `Ctrl+H` |
-| 撤销 / 重做 | `Ctrl+Z` / `Ctrl+Y` |
-| 加粗 / 斜体 | `Ctrl+B` / `Ctrl+I` |
-| 源码模式 / 侧栏 | `Ctrl+/` / `Ctrl+Shift+L` |
-| 专注 / 打字机模式 | `F8` / `F9` |
-| 插入文献 / 公式引用 | `Ctrl+Shift+C` / `Ctrl+Shift+R` |
-| 偏好设置 | `Ctrl+,` |
-
-## 当前支持范围
-
-支持 UTF-8 文稿。超过 1 MiB 的文稿默认使用源码模式，超过 5 MiB 强制使用源码模式；工作区搜索最多返回 500 条匹配。
-
-目前不支持 Mermaid 预览、表格合并/拆分、外部主题安装和自动更新；Zotero/citeproc、Mermaid 和 Pandoc 适配器不随核心启动。
-
-已提供 Markdown 语法和文献提供器的[扩展接口](resources/Extensions.md)，供源码层面的功能扩展使用。插件暂时只支持本地包安装，不提供在线市场；插件包会在安装时校验 manifest、入口文件和可选的 SHA-256 完整性记录。插件注册的命令会出现在编辑工具栏，注册的面板会出现在左侧栏，并通过 Worker 与宿主通信。
-
-## 开发与反馈
-
-从源码运行需要 Node.js 24 LTS、Rust stable 和对应平台的 Tauri 依赖（Linux 需要 WebKitGTK 4.1 与 GTK3）。在工程目录执行：
+环境要求：Node.js 24 LTS、Rust stable，以及 Tauri 对应的平台依赖。Linux 还需要 WebKitGTK 4.1、GTK3、librsvg 和 patchelf。
 
 ```bash
+git clone https://github.com/iawnix/markit.git
+cd markit
 npm ci
 npm run tauri:dev
 ```
 
-浏览器前端可以单独检查：`npm run tauri:frontend`。测试、打包与发布流程见[开发与构建说明](resources/Development.md)，已完成的验证及适用范围见[验证记录](resources/Validation.md)。
+常用命令：
 
-本地 Tauri 构建使用 `npm run tauri:build`；Windows、macOS 和 Linux 的正式安装包由 GitHub Actions 在原生 runner 上生成。详细流程见[开发与构建说明](resources/Development.md)。
+```bash
+npm run typecheck       # TypeScript 类型检查
+npm run tauri:frontend  # 构建桌面前端
+npm run tauri:build     # 构建当前平台 Tauri 程序
+npm run plugin:citations
+```
 
-欢迎通过 [GitHub Issues](https://github.com/iawnix/Markit/issues)反馈问题或提出功能建议。报告问题时请附上应用版本、系统版本、复现步骤及去除个人信息的最小示例；涉及排版或点击定位时，也请注明主题和显示缩放。
+Linux 发行包示例：
 
-第三方组件、图标来源及许可证说明见[第三方与来源说明](resources/ThirdPartyNotices.md)。依赖清单与许可证文本位于程序可执行文件旁，也保存在源码的 `resources` 目录中。
+```bash
+npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles appimage,deb,rpm
+```
+
+开发和发布细节见 [`resources/Development.md`](resources/Development.md)。
+
+## 项目结构
+
+```text
+apps/desktop/              Tauri 桌面应用和 React 界面
+apps/desktop/src-tauri/    Rust 文件、图片、窗口和平台服务
+packages/markdown/         Markdown 解析、目录和 HTML 渲染
+packages/editor/           CodeMirror/ProseMirror 编辑模型
+packages/plugin-sdk/       插件契约、权限和 Worker 宿主
+plugins/citations/         Zotero/citeproc 可选插件
+docs/                      架构和扩展说明
+tests/                     核心单元测试
+```
+
+Markdown 源文本是持久化事实来源。语义编辑器是源码的投影，保存时不会把编辑器内部 JSON 写入文稿，也不会主动改写未编辑区域。
+
+## 许可证
+
+Markit 主体使用 MIT 许可证，见 [`LICENSE`](LICENSE)。第三方依赖、图标和 citeproc-js 的许可证与来源见 [`resources/ThirdPartyNotices.md`](resources/ThirdPartyNotices.md)。
+
+## 反馈与贡献
+
+请在 [Issues](https://github.com/iawnix/markit/issues) 中报告问题或提出建议。提交问题时请注明 Markit 版本、操作系统、复现步骤和最小示例。贡献代码前请先阅读 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。

@@ -2,7 +2,7 @@
 
 ## 用户提供的原始工程和素材
 
-当前 Electron 版本以用户提供的 `Markit-authored-source-0.1.6-2026-09-06.zip` 为行为和素材来源。对照资料保存在 `reference/macos/Markit`。原工程 README 声明界面与图标为原创；本工程沿用 Markit 名称与其中的图标，不为原归档添加新的授权条款。
+Markit 是独立维护的项目。仓库中的 `reference/macos/Markit` 和 `Markit-authored-source-0.1.6-2026-09-06.zip` 仅作为历史素材与行为研究记录，不是运行时依赖，也不代表 Markit 与其他项目存在仓库继承关系。原始素材的版权和许可范围保持不变。
 
 - `resources/icon.png` 与原工程 `Resources/Assets.xcassets/AppIcon.appiconset/markedown-icon-256.png` 内容一致，SHA-256 为 `2958645e18020083f8ec0f64aa65481373bef53ebd6ab7fddb1e84ef75497f4b`。
 - `resources/icon.ico` 封装原工程的 16、32、64、128、256 像素 PNG，供 Windows 在不同显示尺寸下使用。
@@ -44,7 +44,7 @@ npm run notices
 npm run dist:win
 ```
 
-`prebuild` 会自动运行许可证生成步骤，`dist:win` 或 `dist:linux` 在打包后调用 `scripts/release.mjs`。如仅需重新整理现有构建产物，可直接运行该脚本。许可证、依赖清单与本说明随程序包提供，位于程序可执行文件旁；GitHub 的 [Source code (zip)](https://github.com/chen-yu-hao/Markitdown/archive/refs/tags/v0.3.10.zip) 中也保留了 `resources` 目录下的对应文件。这些说明不再作为单独的 Release 附件。
+`prebuild` 会自动运行许可证生成步骤。如仅需重新整理现有构建产物，可直接运行该脚本。许可证、依赖清单与本说明随程序包提供，位于程序可执行文件旁；源码归档中的 `resources` 目录也保留相同记录。这些说明不再作为单独的 Release 附件。
 
 本地 `release/` 目录仍会生成说明文件副本，并将其纳入本地 `SHA256SUMS.txt`，用于交付归档与校验。生成依赖清单时保留未声明许可证的条目，标记为待核实，不自动赋予 MIT 或其他默认许可证。
 
