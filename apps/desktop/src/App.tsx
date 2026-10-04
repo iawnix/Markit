@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
-import { Download, FileText, FolderOpen, ImagePlus, Languages, Menu, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { Download, FileText, FolderOpen, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { clearRecovery, exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
@@ -431,19 +432,31 @@ export default function App() {
 
   const filteredHeadings = useMemo(() => headings.filter(item => item.text.toLowerCase().includes(query.toLowerCase())), [headings, query]);
   const closeDocument = (id: string) => { setDocuments(current => current.filter(item => item.id !== id)); if (activeId === id) setActiveId(documents.find(item => item.id !== id)?.id || null); };
+  const minimizeWindow = () => { if (isTauriRuntime) void getCurrentWindow().minimize().catch(() => undefined); };
+  const toggleMaximizeWindow = async () => {
+    if (!isTauriRuntime) return;
+    const appWindow = getCurrentWindow();
+    try { if (await appWindow.isMaximized()) await appWindow.unmaximize(); else await appWindow.maximize(); } catch { /* Window controls are unavailable in browser preview. */ }
+  };
+  const closeWindow = () => { if (isTauriRuntime) void getCurrentWindow().close().catch(() => undefined); };
 
   return <div className="markit-app">
     <header className="titlebar">
-      <div className="titlebar-left">
+      <div className="titlebar-left" data-tauri-drag-region="true">
         <div className="brand" title="Markit"><span className="brand-mark">M</span><strong>Markit</strong></div>
       </div>
-      <div className="titlebar-title" title={active ? titleFor(active.path, locale) : 'Markit'}>
+      <div className="titlebar-title" data-tauri-drag-region="true" title={active ? titleFor(active.path, locale) : 'Markit'}>
         <span className="titlebar-document">{active ? titleFor(active.path, locale) : 'Markit'}</span>
         {active && <span className={`titlebar-status ${active.dirty ? 'dirty' : ''}`} aria-label={active.dirty ? t('unsaved') : t('saved')} />}
       </div>
       <div className="titlebar-actions">
         <button className="icon-button" title={t('language')} aria-label={t('language')} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><Languages size={16} /></button>
         <button className="icon-button" title={t('settings')} aria-label={t('settings')} onClick={() => setShowSettings(true)}><Settings2 size={16} /></button>
+        <div className="window-controls" aria-label="Window controls">
+          <button className="window-control" title="Minimize" aria-label="Minimize" onClick={minimizeWindow}><Minus size={15} /></button>
+          <button className="window-control" title="Maximize" aria-label="Maximize" onClick={() => void toggleMaximizeWindow()}><Square size={13} /></button>
+          <button className="window-control window-control-close" title="Close" aria-label="Close" onClick={closeWindow}><X size={15} /></button>
+        </div>
       </div>
     </header>
     <div className="workspace">
