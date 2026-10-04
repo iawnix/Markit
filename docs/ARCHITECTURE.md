@@ -50,6 +50,11 @@ Linux artifact and their distribution WebKitGTK compatibility packages.
 ## Plugin boundary
 
 Plugins are `.markit-plugin` packages with a manifest, an entry module and an
-integrity record. Plugin code runs in a Worker and requests filesystem,
-network, command and settings access through a capability broker. UI
-contributions are declarative so plugins do not depend on React internals.
+optional integrity record. The desktop settings manager validates the archive,
+persists its manifest and enabled state, and displays requested permissions.
+Plugin code runs in a Worker and requests filesystem, network, command and
+settings access through a capability broker. UI contributions are declarative
+so plugins do not depend on React internals. There is no online marketplace in
+the first release; packages are installed locally. Registered commands are
+shown in the editor toolbar and execute inside the plugin Worker. Registered
+panels appear as isolated sidebar entries and receive no direct DOM access.

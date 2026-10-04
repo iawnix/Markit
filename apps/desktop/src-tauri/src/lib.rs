@@ -18,6 +18,7 @@ const MAX_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_EXPORT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_IMAGE_PIXELS: u64 = 256_000_000;
+const MAX_PLUGIN_PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
 
 type AssetStore = Arc<RwLock<HashMap<String, PathBuf>>>;
 
@@ -482,6 +483,24 @@ fn import_images(
     Ok(destinations)
 }
 
+#[tauri::command]
+fn read_plugin_package(path: String) -> Result<Vec<u8>, String> {
+    let path = validate_local_path(&path)?;
+    if path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("markit-plugin"))
+        != Some(true)
+    {
+        return Err("Select a .markit-plugin package".into());
+    }
+    let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+    if metadata.len() > MAX_PLUGIN_PACKAGE_BYTES {
+        return Err("Plugin package exceeds the 64 MiB limit".into());
+    }
+    fs::read(&path).map_err(|error| error.to_string())
+}
+
 pub fn run() {
     let assets: AssetStore = Arc::new(RwLock::new(HashMap::new()));
     let protocol_assets = Arc::clone(&assets);
@@ -529,7 +548,8 @@ pub fn run() {
             list_directory,
             extract_outline,
             validate_image,
-            import_images
+            import_images,
+            read_plugin_package
         ])
         .setup(|app| {
             let _ = app.path().app_config_dir();

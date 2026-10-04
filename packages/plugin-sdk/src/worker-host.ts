@@ -7,6 +7,7 @@ interface ResponseMessage { type: 'response'; id: string; ok: boolean; value?: u
 
 export interface PluginHostOptions {
   manifest: PluginManifest;
+  entrySource: string;
   confirmPermission(permission: PluginPermission): Promise<boolean>;
   handleRequest(method: string, args: unknown[]): Promise<unknown>;
 }
@@ -23,12 +24,16 @@ export class PluginWorkerHost {
   }
 
   async activate(): Promise<void> {
-    await this.request('activate', [this.options.manifest]);
+    await this.request('activate', [this.options.manifest, this.options.entrySource]);
   }
 
   async deactivate(): Promise<void> {
     await this.request('deactivate', []);
     this.worker.terminate();
+  }
+
+  async executeCommand(id: string): Promise<void> {
+    await this.request('command.execute', [id]);
   }
 
   private async handleMessage(message: RequestMessage | ResponseMessage) {

@@ -77,7 +77,7 @@ $$
 
 ### 文献插件
 
-核心版本不会默认连接 Zotero，也不会初始化 citeproc、CSL 样式或参考文献面板。文献管理会通过独立的 `plugins/citations` 插件提供，插件安装入口和权限确认完成后再启用 Zotero 本地 API。旧文稿中的 `markedown:bibliography` 标记将由兼容插件识别。
+核心版本不会默认连接 Zotero，也不会初始化 citeproc、CSL 样式或参考文献面板。文献管理会通过独立的 `plugins/citations` 插件提供；设置中的插件管理器支持安装本地 `.markit-plugin` 包、查看权限并在启用高风险权限前确认。旧文稿中的 `markedown:bibliography` 标记将由兼容插件识别。
 
 公式编号、交叉引用和文档大纲属于核心功能。更多写作用法见[学术写作指南](resources/AcademicWriting.md)与[示例文稿](resources/AcademicExample.md)。
 
@@ -133,7 +133,7 @@ LaTeX、RST、Textile、MediaWiki 等文本导出会生成相邻的 `markedown-a
 
 目前不支持 Mermaid 预览、表格合并/拆分、外部主题安装和自动更新；Zotero/citeproc、Mermaid 和 Pandoc 适配器不随核心启动。
 
-已提供 Markdown 语法和文献提供器的[扩展接口](resources/Extensions.md)，供源码层面的功能扩展使用；当前没有外部插件安装入口或插件市场。
+已提供 Markdown 语法和文献提供器的[扩展接口](resources/Extensions.md)，供源码层面的功能扩展使用。插件暂时只支持本地包安装，不提供在线市场；插件包会在安装时校验 manifest、入口文件和可选的 SHA-256 完整性记录。插件注册的命令会出现在编辑工具栏，注册的面板会出现在左侧栏，并通过 Worker 与宿主通信。
 
 ## 开发与反馈
 

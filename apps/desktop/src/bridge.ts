@@ -58,6 +58,11 @@ export async function importImages(documentPath: string, inputs: ImageInput[], f
   return invoke<string[]>('import_images', { documentPath, folder, inputs });
 }
 
+export async function readPluginPackage(path: string): Promise<number[]> {
+  if (!isTauriRuntime) throw new Error('Plugin package reading is only available in the desktop build.');
+  return invoke<number[]>('read_plugin_package', { path });
+}
+
 export function parseOutline(source: string): OutlineEntry[] {
   const result: OutlineEntry[] = [];
   for (const match of source.matchAll(/^(#{1,6})[ \t]+(.+?)\s*#*\s*$/gm)) {

@@ -4,6 +4,8 @@ import { isLosslessCandidate, parseMarkdown, serializeMarkdown } from '../packag
 import { normalizePermissions, requiresPrompt } from '../packages/plugin-sdk/src/permissions';
 import { PluginRegistry } from '../packages/plugin-sdk/src/registry';
 import { validateManifest } from '../packages/plugin-sdk/src/index';
+import { parsePluginPackage } from '../packages/plugin-sdk/src/package';
+import { strToU8, zipSync } from 'fflate';
 
 describe('Markit Markdown core', () => {
   it('extracts a stable heading outline with source offsets', () => {
@@ -45,5 +47,21 @@ describe('Markit Markdown core', () => {
 
   it('rejects undeclared plugin permissions at manifest validation time', () => {
     expect(validateManifest({ id: 'markit.bad', name: 'Bad', version: '1.0.0', apiVersion: 1, entry: 'index.js', permissions: ['network.elevated'], contributions: [] })).toBe(false);
+  });
+
+  it('validates plugin archives and rejects integrity tampering', async () => {
+    const manifest = JSON.stringify({ id: 'markit.archive', name: 'Archive', version: '1.0.0', apiVersion: 1, entry: 'dist/index.js', permissions: [], contributions: [] });
+    const entry = strToU8('export default {};');
+    const valid = zipSync({ 'manifest.json': strToU8(manifest), 'dist/index.js': entry });
+    await expect(parsePluginPackage(valid)).resolves.toMatchObject({ manifest: { id: 'markit.archive' }, entrySource: 'export default {};', integrityVerified: false });
+    const tampered = zipSync({ 'manifest.json': strToU8(manifest), 'dist/index.js': entry, 'integrity.json': strToU8(JSON.stringify({ 'dist/index.js': '0'.repeat(64) })) });
+    await expect(parsePluginPackage(tampered)).rejects.toThrow('integrity check failed');
+  });
+
+  it('persists plugin enablement through a fresh registry', () => {
+    const registry = new PluginRegistry();
+    registry.install({ id: 'markit.persist', name: 'Persist', version: '1.0.0', apiVersion: 1, entry: 'index.js', permissions: [], contributions: [] });
+    registry.setEnabled('markit.persist', true);
+    expect(new PluginRegistry(registry.toJSON()).get('markit.persist')?.enabled).toBe(true);
   });
 });
