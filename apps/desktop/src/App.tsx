@@ -434,8 +434,13 @@ export default function App() {
 
   return <div className="markit-app">
     <header className="titlebar">
-      <div className="brand"><span className="brand-mark">M</span><strong>Markit</strong></div>
-      <div className="titlebar-title">{active ? titleFor(active.path, locale) : 'Markit'}</div>
+      <div className="titlebar-left">
+        <div className="brand" title="Markit"><span className="brand-mark">M</span><strong>Markit</strong></div>
+      </div>
+      <div className="titlebar-title" title={active ? titleFor(active.path, locale) : 'Markit'}>
+        <span className="titlebar-document">{active ? titleFor(active.path, locale) : 'Markit'}</span>
+        {active && <span className={`titlebar-status ${active.dirty ? 'dirty' : ''}`} aria-label={active.dirty ? t('unsaved') : t('saved')} />}
+      </div>
       <div className="titlebar-actions">
         <button className="icon-button" title={t('language')} aria-label={t('language')} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><Languages size={16} /></button>
         <button className="icon-button" title={t('settings')} aria-label={t('settings')} onClick={() => setShowSettings(true)}><Settings2 size={16} /></button>

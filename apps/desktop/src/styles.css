@@ -1,17 +1,21 @@
-:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202522; background: #f5f6f4; font-synthesis: none; }
+:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202522; background: #f3f4f1; font-synthesis: none; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 820px; min-height: 100vh; background: #f5f6f4; }
+body { margin: 0; min-width: 820px; min-height: 100vh; background: #f3f4f1; }
 button, input, textarea { font: inherit; }
-button { border: 0; cursor: pointer; color: inherit; }
-.markit-app { min-height: 100vh; display: flex; flex-direction: column; background: #f5f6f4; }
-.titlebar { height: 42px; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-bottom: 1px solid #dfe3de; background: #fbfcfa; user-select: none; }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 150px; font-size: 13px; letter-spacing: .01em; }
-.brand-mark { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; background: #2d6a52; color: #fff; font-weight: 700; font-size: 12px; }
-.titlebar-title { flex: 1; min-width: 0; overflow: hidden; text-align: center; text-overflow: ellipsis; color: #68736c; font-size: 12px; }
+.markit-app { min-height: 100vh; display: flex; flex-direction: column; background: #f3f4f1; }
+.titlebar { position: relative; height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 18px; background: #f3f4f1; user-select: none; }
+.titlebar-left { display: flex; align-items: center; min-width: 170px; }
+.brand { display: flex; align-items: center; gap: 8px; color: #637067; font-size: 12px; letter-spacing: .02em; }
+.brand-mark { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid #c8d9cb; border-radius: 7px; background: #e5eee6; color: #2d6a52; font-weight: 750; font-size: 12px; }
+.titlebar-title { position: absolute; left: 50%; display: flex; align-items: center; justify-content: center; gap: 8px; width: min(42%, 420px); min-width: 0; transform: translateX(-50%); color: #536057; font-size: 12px; font-weight: 550; }
+.titlebar-document { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titlebar-status { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #8eb49b; box-shadow: 0 0 0 3px #e2eee5; }
+.titlebar-status.dirty { background: #bf8154; box-shadow: 0 0 0 3px #f3e6db; }
 .titlebar-actions, .sidebar-tabs, .document-tabs, .editor-toolbar, .statusbar { display: flex; align-items: center; }
-.titlebar-actions { gap: 3px; }
-.icon-button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 5px; background: transparent; color: #68736c; }
-.icon-button:hover { background: #edf1ed; color: #2d6a52; }
+.titlebar-actions { gap: 2px; margin-left: auto; }
+.icon-button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: transparent; color: #89958d; transition: background-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out; }
+.icon-button:hover { background: #e8ede8; color: #2d6a52; }
+.icon-button:active { transform: scale(.96); }
 .workspace { min-height: 0; flex: 1; display: flex; }
 .sidebar { width: 256px; display: flex; border-right: 1px solid #dfe3de; background: #f8faf7; }
 .sidebar-tabs { width: 42px; flex-direction: column; gap: 4px; padding-top: 12px; border-right: 1px solid #e7ebe6; }
@@ -29,16 +33,18 @@ button { border: 0; cursor: pointer; color: inherit; }
 .sidebar-search { width: 100%; padding: 8px 9px; border: 1px solid #d8dfd9; border-radius: 4px; outline: 0; background: #fff; color: #344139; font-size: 12px; }
 .sidebar-search:focus { border-color: #77a88d; box-shadow: 0 0 0 2px #dcebe1; }
 .main-panel { min-width: 0; flex: 1; display: flex; flex-direction: column; background: #fff; }
-.document-tabs { min-height: 38px; overflow: auto hidden; border-bottom: 1px solid #e1e5e1; background: #fafbf9; }
-.new-tab { width: 38px; height: 37px; flex: 0 0 auto; display: grid; place-items: center; background: transparent; color: #829087; }
-.new-tab:hover { color: #2d6a52; background: #edf2ee; }
-.document-tab { max-width: 210px; height: 37px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-right: 1px solid #e8ebe8; background: transparent; color: #7b867e; font-size: 12px; }
+.document-tabs { min-height: 38px; gap: 3px; overflow: auto hidden; padding: 3px 12px; background: #f3f4f1; }
+.new-tab { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; background: transparent; color: #829087; transition: background-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out; }
+.new-tab:hover { color: #2d6a52; background: #e8ede8; }
+.new-tab:active { transform: scale(.96); }
+.document-tab { max-width: 230px; height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #7b867e; font-size: 12px; transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out; }
 .document-tab span:not(.tab-close) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.document-tab.active { background: #fff; color: #2d3b32; box-shadow: inset 0 2px #4c8d6c; }
+.document-tab:hover { background: #e9eee9; color: #506057; }
+.document-tab.active { border-color: #e2e8e2; background: #fff; color: #2d3b32; box-shadow: 0 1px 3px #29372e10; }
 .document-tab i { width: 5px; height: 5px; border-radius: 50%; background: #b56c3a; }
 .tab-close { display: grid; place-items: center; color: #a1aaa3; }
 .tab-close:hover { color: #a74d43; }
-.editor-toolbar { min-height: 40px; gap: 5px; padding: 0 18px; border-bottom: 1px solid #edf0ed; background: #fff; }
+.editor-toolbar { min-height: 42px; gap: 5px; padding: 0 22px; border-top: 1px solid #f0f2ef; border-bottom: 1px solid #f0f2ef; background: #fff; }
 .toolbar-command, .mode-switch, .primary-command, .secondary-command { display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; font-size: 12px; }
 .toolbar-command { padding: 6px 8px; background: transparent; color: #68736c; }
 .toolbar-command:hover:not(:disabled) { background: #f0f3f0; color: #2d6a52; }
