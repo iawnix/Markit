@@ -218,10 +218,6 @@ export default function App() {
   }
 
   async function setPluginEnabled(plugin: InstalledPlugin) {
-    if (!plugin.enabled && plugin.manifest.permissions.some(requiresPrompt)) {
-      const permissions = plugin.manifest.permissions.filter(requiresPrompt).join(', ');
-      if (!window.confirm(`${t('pluginPermissionPrompt')}\n${permissions}`)) return;
-    }
     const registry = new PluginRegistry(plugins);
     try {
       if (plugin.enabled) {
@@ -230,7 +226,9 @@ export default function App() {
         pluginHostsRef.current.delete(plugin.manifest.id);
         clearPluginContributions(plugin.manifest.id);
       } else {
-        await activatePlugin(plugin);
+        const approved = plugin.manifest.permissions.filter(requiresPrompt);
+        if (approved.length && !window.confirm(`${t('pluginPermissionPrompt')}\n${approved.join(', ')}`)) return;
+        await activatePlugin(plugin, approved);
       }
       registry.setEnabled(plugin.manifest.id, !plugin.enabled);
       registry.setError(plugin.manifest.id, undefined);
@@ -244,13 +242,14 @@ export default function App() {
     }
   }
 
-  async function activatePlugin(plugin: InstalledPlugin): Promise<void> {
+  async function activatePlugin(plugin: InstalledPlugin, approvedPermissions: InstalledPlugin['manifest']['permissions'] = []): Promise<void> {
     if (pluginHostsRef.current.has(plugin.manifest.id)) return;
     const entrySource = await loadPluginEntry(plugin.manifest.id);
     if (!entrySource) throw new Error('Plugin package contents are unavailable. Reinstall the plugin.');
     const host = new PluginWorkerHost({
       manifest: plugin.manifest,
       entrySource,
+      approvedPermissions,
       confirmPermission: async permission => window.confirm(`${t('pluginPermissionPrompt')}\n${permission}`),
       handleRequest: async (method, args) => {
         if (method === 'document.read') return documentsRef.current.find(item => item.id === activeIdRef.current) || null;

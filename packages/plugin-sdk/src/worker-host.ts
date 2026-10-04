@@ -8,6 +8,7 @@ interface ResponseMessage { type: 'response'; id: string; ok: boolean; value?: u
 export interface PluginHostOptions {
   manifest: PluginManifest;
   entrySource: string;
+  approvedPermissions?: PluginPermission[];
   confirmPermission(permission: PluginPermission): Promise<boolean>;
   handleRequest(method: string, args: unknown[]): Promise<unknown>;
 }
@@ -16,8 +17,10 @@ export interface PluginHostOptions {
 export class PluginWorkerHost {
   private readonly worker: Worker;
   private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
+  private readonly approvedPermissions: Set<PluginPermission>;
 
   constructor(private readonly options: PluginHostOptions) {
+    this.approvedPermissions = new Set(options.approvedPermissions || []);
     this.worker = new Worker(new URL('./worker-entry.ts', import.meta.url), { type: 'module' });
     this.worker.addEventListener('message', event => { void this.handleMessage(event.data as RequestMessage | ResponseMessage); });
     this.worker.addEventListener('error', event => { for (const request of this.pending.values()) request.reject(new Error(event.message || 'Plugin worker failed.')); this.pending.clear(); });
@@ -49,9 +52,12 @@ export class PluginWorkerHost {
       this.worker.postMessage({ type: 'response', id: message.id, ok: false, error: `Permission not declared: ${permission}` } satisfies ResponseMessage);
       return;
     }
-    if (permission && (requiresPrompt(permission) && !(await this.options.confirmPermission(permission)))) {
-      this.worker.postMessage({ type: 'response', id: message.id, ok: false, error: `Permission denied: ${permission}` } satisfies ResponseMessage);
-      return;
+    if (permission && requiresPrompt(permission) && !this.approvedPermissions.has(permission)) {
+      if (!(await this.options.confirmPermission(permission))) {
+        this.worker.postMessage({ type: 'response', id: message.id, ok: false, error: `Permission denied: ${permission}` } satisfies ResponseMessage);
+        return;
+      }
+      this.approvedPermissions.add(permission);
     }
     try {
       const value = await this.options.handleRequest(message.method, message.args);
@@ -65,7 +71,7 @@ export class PluginWorkerHost {
     if (method.startsWith('document.')) return method === 'document.update' ? 'document.write' : 'document.read';
     if (method.startsWith('filesystem.')) return method === 'filesystem.write' ? 'filesystem.write' : 'filesystem.read';
     if (method.startsWith('network.')) return 'network';
-    if (method.startsWith('command.')) return 'commands';
+    if (method.startsWith('command.') || method.startsWith('commands.')) return 'commands';
     if (method.startsWith('settings.')) return 'settings';
     return undefined;
   }
