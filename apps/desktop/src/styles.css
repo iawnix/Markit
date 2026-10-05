@@ -39,6 +39,9 @@ button { border: 0; cursor: pointer; color: inherit; }
 button:focus { outline: none; }
 button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .markit-app { width: 100%; height: 100vh; min-height: 0; display: flex; flex-direction: column; background: var(--canvas); color: var(--text); }
+.theme-dark { color-scheme: dark; }
+.theme-light { color-scheme: light; }
+.theme-system { color-scheme: light dark; }
 .titlebar { position: relative; z-index: 3; height: 35px; flex: 0 0 35px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 5px 0 11px; background: var(--canvas); user-select: none; }
 .titlebar-left { display: flex; align-items: center; gap: 8px; min-width: 180px; height: 100%; }
 .menu-trigger, .icon-button { display: grid; place-items: center; background: transparent; color: var(--text-muted); transition: color 140ms ease-out, background-color 140ms ease-out, transform 140ms ease-out; }
@@ -184,10 +187,11 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; color: var(--heading); font-size: 13px; }
 .settings-section-heading .secondary-command { margin: 0; padding: 6px 9px; }
 .settings-control { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 42px; color: var(--text-muted); font-size: 13px; }
-.settings-select { min-width: 220px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 3px; outline: 0; background: #292c30; color: var(--text); font-size: 12px; }
-.settings-select:focus { border-color: #737d87; box-shadow: 0 0 0 2px #737d8726; }
+.settings-select { min-width: 220px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 3px; outline: 0; background: var(--input); color: var(--text); font-size: 12px; color-scheme: inherit; }
+.settings-select option { background: var(--input); color: var(--text); }
+.settings-select:focus { border-color: var(--text-muted); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-muted) 16%, transparent); }
 .settings-range { display: inline-flex; align-items: center; gap: 10px; min-width: 220px; }
-.settings-range input { width: 170px; accent-color: #a4b0ba; }
+.settings-range input { width: 170px; accent-color: var(--accent); }
 .settings-range output { width: 38px; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
 .plugin-list { display: flex; flex-direction: column; gap: 7px; }
 .plugin-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 3px; background: var(--input); }
