@@ -11,7 +11,7 @@
   },
   "app": {
     "withGlobalTauri": false,
-    "windows": [{ "title": "Markit", "width": 1280, "height": 820, "minWidth": 820, "minHeight": 560, "resizable": true, "decorations": false, "shadow": true }],
+    "windows": [{ "title": "Markit", "width": 1280, "height": 820, "center": true, "minWidth": 820, "minHeight": 560, "resizable": true, "decorations": false, "shadow": true }],
     "security": { "csp": "default-src 'self'; img-src 'self' data: markit-asset:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:23119; object-src 'none'; base-uri 'none'" }
   },
   "bundle": {
