@@ -30,6 +30,14 @@ const FONT_STACKS = {
 } as const;
 type EditorFont = keyof typeof FONT_STACKS;
 
+const SIDEBAR_DEFAULT_WIDTH = 300;
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 460;
+
+function clampSidebarWidth(value: number) {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
+}
+
 function titleFor(path: string | null, locale: Locale) {
   return path?.split(/[\\/]/).at(-1) || message(locale, 'untitled');
 }
@@ -61,6 +69,12 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('markit.sidebarWidth'));
+    return Number.isFinite(stored) ? clampSidebarWidth(stored) : SIDEBAR_DEFAULT_WIDTH;
+  });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
   const documentsRef = useRef<DocumentSnapshot[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +159,7 @@ export default function App() {
     document.documentElement.style.setProperty('--editor-font-family', FONT_STACKS[editorFont]);
     document.documentElement.style.setProperty('--editor-font-size', `${editorFontSize}px`);
   }, [editorFont, editorFontSize]);
+  useEffect(() => { localStorage.setItem('markit.sidebarWidth', String(sidebarWidth)); }, [sidebarWidth]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setMenuOpen(false); return; }
@@ -516,9 +531,28 @@ export default function App() {
     }
     setSidebarCollapsed(current => !current);
   };
+  const beginSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (sidebarCollapsed || focusMode || event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    sidebarResizeRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+    setSidebarResizing(true);
+  };
+  const resizeSidebar = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = sidebarResizeRef.current;
+    if (!resize) return;
+    setSidebarWidth(clampSidebarWidth(resize.startWidth + event.clientX - resize.startX));
+  };
+  const endSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!sidebarResizeRef.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    sidebarResizeRef.current = null;
+    setSidebarResizing(false);
+  };
+  const adjustSidebarWidth = (delta: number) => setSidebarWidth(current => clampSidebarWidth(current + delta));
   const sidebarIsVisible = !focusMode && !sidebarCollapsed;
 
-  return <div className={`markit-app ${focusMode ? 'focus-mode' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+  return <div className={`markit-app ${focusMode ? 'focus-mode' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${sidebarResizing ? 'sidebar-resizing' : ''}`} style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}>
     <header className="titlebar">
       <div className="titlebar-left" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()}>
         <button className="menu-trigger" title={t('menu')} aria-label={t('menu')} onPointerDown={event => event.stopPropagation()} onClick={() => setMenuOpen(current => !current)}><Menu size={16} /></button>
@@ -567,6 +601,7 @@ export default function App() {
           {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span><span className="count">{query ? searchResults.length : ''}</span></div><input className="sidebar-search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('search')} />{query && searchResults.length ? <div className="search-results">{searchResults.map((result, index) => <button className="search-result" key={`${result.offset}:${index}`} onClick={() => jumpToSearch(result.offset, index)}><strong>{result.text}</strong><small>#{index + 1}</small></button>)}</div> : query ? <p className="empty-sidebar">{t('searchNoResults')}</p> : <p className="empty-sidebar">{t('searchHint')}</p>}</>}
           {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div>{selectedPluginPanel.searchCommand && <input className="plugin-panel-search" aria-label={t('pluginSearchPlaceholder')} placeholder={t('pluginSearchPlaceholder')} onKeyDown={event => { if (event.key === 'Enter') { const command = pluginCommands.find(item => item.pluginId === selectedPluginPanel.pluginId && item.id === selectedPluginPanel.searchCommand); if (command) void runPluginCommand(command, [(event.currentTarget as HTMLInputElement).value]); } }} />}{selectedPluginPanel.content?.status && <p className="plugin-panel-status">{selectedPluginPanel.content.status}</p>}{selectedPluginPanel.content?.items?.length ? <div className="plugin-panel-items">{selectedPluginPanel.content.items.map(item => <button className="plugin-panel-item" key={item.id} onClick={() => item.command && runPanelAction(selectedPluginPanel, item.command)} disabled={!item.command}><strong>{item.title}</strong>{item.meta && <small>{item.meta}</small>}</button>)}</div> : <p className="plugin-panel-status">{t('pluginNoResults')}</p>}{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
         </div>
+        <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label={t('resizeSidebar')} aria-valuemin={SIDEBAR_MIN_WIDTH} aria-valuemax={SIDEBAR_MAX_WIDTH} aria-valuenow={sidebarWidth} tabIndex={0} onPointerDown={beginSidebarResize} onPointerMove={resizeSidebar} onPointerUp={endSidebarResize} onPointerCancel={endSidebarResize} onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)} onKeyDown={event => { if (event.key === 'ArrowLeft') { event.preventDefault(); adjustSidebarWidth(-16); } if (event.key === 'ArrowRight') { event.preventDefault(); adjustSidebarWidth(16); } if (event.key === 'Home') { event.preventDefault(); setSidebarWidth(SIDEBAR_MIN_WIDTH); } if (event.key === 'End') { event.preventDefault(); setSidebarWidth(SIDEBAR_MAX_WIDTH); } }} />
       </aside>
       <main className="main-panel">
         <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); closeDocument(document.id); }}><X size={13} /></span></button>)}</div>
