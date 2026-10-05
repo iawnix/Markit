@@ -123,7 +123,7 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .status-button { min-width: 23px; height: 23px; display: grid; place-items: center; padding: 0 4px; border-radius: 3px; background: transparent; color: var(--text-muted); font-size: 11px; transition: background-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out; }
 .status-button:hover { background: var(--surface-hover); color: var(--text); }
 .status-mode-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid #41464b; border-radius: 4px; background: #2b2e32; }
-.status-mode-option { min-width: 58px; height: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 8px; border-radius: 2px; background: transparent; color: var(--text-faint); font-size: 11px; transition: background-color 140ms ease-out, color 140ms ease-out; }
+.status-mode-option { width: 28px; height: 22px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 2px; background: transparent; color: var(--text-faint); transition: background-color 140ms ease-out, color 140ms ease-out; }
 .status-mode-option:hover { color: var(--text); }
 .status-mode-option.selected { background: #4a5158; color: #f0f1f2; }
 .status-dirty { color: #c79a76; }
