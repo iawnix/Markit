@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { baseKeymap } from 'prosemirror-commands';
 import { history } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
@@ -55,6 +57,48 @@ function searchDecorations(state: EditorState, query: string): DecorationSet {
   return DecorationSet.create(state.doc, decorations);
 }
 
+const inlineMathPattern = /(?<!\\)(?<!\$)\$([^\n$]+?)\$(?!\$)/g;
+
+function mathWidget(source: string, display: boolean) {
+  const widget = document.createElement('span');
+  widget.className = display ? 'md-math-display' : 'md-math-inline';
+  widget.title = display ? `$$${source}$$` : `$${source}$`;
+  widget.setAttribute('aria-label', widget.title);
+  widget.contentEditable = 'false';
+  try {
+    widget.innerHTML = katex.renderToString(source, { displayMode: display, throwOnError: false, strict: 'ignore', trust: false, output: 'htmlAndMathml', maxExpand: 1000, maxSize: 20 });
+  } catch {
+    widget.textContent = display ? `$$${source}$$` : `$${source}$`;
+  }
+  return widget;
+}
+
+function mathDecorations(state: EditorState): DecorationSet {
+  const decorations: Decoration[] = [];
+  state.doc.descendants((node, position) => {
+    if (node.type.name === 'code_block') return false;
+    if (node.type.name === 'paragraph') {
+      const blockMatch = /^\s*\$\$([\s\S]+?)\$\$\s*$/.exec(node.textContent);
+      if (blockMatch && node.content.size > 0) {
+        const from = position + 1;
+        const to = from + node.content.size;
+        decorations.push(Decoration.inline(from, to, { class: 'md-math-source', 'aria-hidden': 'true' }));
+        decorations.push(Decoration.widget(from, mathWidget(blockMatch[1].trim(), true), { side: -1, key: `display:${from}:${blockMatch[1]}` }));
+        return false;
+      }
+    }
+    if (!node.isText || !node.text) return;
+    for (const match of node.text.matchAll(inlineMathPattern)) {
+      if (match.index === undefined) continue;
+      const from = position + match.index;
+      const to = from + match[0].length;
+      decorations.push(Decoration.inline(from, to, { class: 'md-math-source', 'aria-hidden': 'true' }));
+      decorations.push(Decoration.widget(from, mathWidget(match[1], false), { side: -1, key: `inline:${from}:${match[0]}` }));
+    }
+  });
+  return DecorationSet.create(state.doc, decorations);
+}
+
 async function projectImages(source: string, documentPath: string | null): Promise<Projection> {
   const mappings = new Map<string, string>();
   if (!documentPath) return { source, mappings };
@@ -106,8 +150,9 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
         doc: markdownParser.parse(source),
         plugins: [history(), keymap(baseKeymap), new Plugin({ props: { decorations: state => {
           const citations = citationDecorations(state, citationMapRef.current).find();
+          const math = mathDecorations(state).find();
           const matches = searchDecorations(state, searchQueryRef.current).find();
-          return DecorationSet.create(state.doc, [...citations, ...matches]);
+          return DecorationSet.create(state.doc, [...citations, ...math, ...matches]);
         } } })],
       }),
       dispatchTransaction(transaction) {
