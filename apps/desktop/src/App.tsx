@@ -81,6 +81,7 @@ export default function App() {
   const pluginInputRef = useRef<HTMLInputElement>(null);
   const pluginHostsRef = useRef(new Map<string, PluginWorkerHost>());
   const activeIdRef = useRef<string | null>(null);
+  const saveRef = useRef<() => Promise<void>>(async () => undefined);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>(loadPlugins);
   const [pluginError, setPluginError] = useState('');
   const [pluginCommands, setPluginCommands] = useState<PluginCommandContribution[]>([]);
@@ -163,6 +164,11 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setMenuOpen(false); return; }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void saveRef.current();
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key === 'j') {
         event.preventDefault();
         setFocusMode(current => !current);
@@ -250,6 +256,8 @@ export default function App() {
       setDocuments(current => current.map(item => item.id === active.id ? { ...item, path, title: titleFor(path, locale), savedSource: item.source, dirty: false, revision, externalChange: false } : item));
     } catch (error) { window.alert(String(error)); }
   }
+
+  saveRef.current = save;
 
   async function reloadActiveDocument() {
     if (!active?.path) return;

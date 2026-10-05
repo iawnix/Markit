@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { baseKeymap } from 'prosemirror-commands';
-import { history } from 'prosemirror-history';
+import { history, redo, undo } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { EditorState, Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
@@ -148,7 +148,7 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
     const editor = new EditorView(host.current, {
       state: EditorState.create({
         doc: markdownParser.parse(source),
-        plugins: [history(), keymap(baseKeymap), new Plugin({ props: { decorations: state => {
+        plugins: [history(), keymap({ ...baseKeymap, 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }), new Plugin({ props: { decorations: state => {
           const citations = citationDecorations(state, citationMapRef.current).find();
           const math = mathDecorations(state).find();
           const matches = searchDecorations(state, searchQueryRef.current).find();
