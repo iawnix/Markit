@@ -42,6 +42,9 @@ export default function App() {
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [query, setQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const editorRef = useRef<SourceEditorHandle>(null);
   const documentsRef = useRef<DocumentSnapshot[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +123,17 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [active?.id, active?.path, active?.revision?.hash, active?.revision?.size, active?.revision?.modifiedMs]);
   useEffect(() => { localStorage.setItem('markit.locale', locale); document.documentElement.lang = locale; }, [locale]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMenuOpen(false); return; }
+      if ((event.ctrlKey || event.metaKey) && event.key === 'j') {
+        event.preventDefault();
+        setFocusMode(current => !current);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   useEffect(() => {
     if (!isTauriRuntime) return;
     void getCurrentWindow().setDecorations(false).catch(() => undefined);
@@ -448,18 +462,17 @@ export default function App() {
   };
   const closeWindow = () => { if (isTauriRuntime) void getCurrentWindow().close().catch(() => undefined); };
 
-  return <div className="markit-app">
+  return <div className={`markit-app ${focusMode ? 'focus-mode' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     <header className="titlebar">
       <div className="titlebar-left" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()}>
-        <div className="brand" title="Markit"><span className="brand-mark">M</span><strong>Markit</strong></div>
+        <button className="menu-trigger" title={t('menu')} aria-label={t('menu')} onPointerDown={event => event.stopPropagation()} onClick={() => setMenuOpen(current => !current)}><Menu size={16} /></button>
+        <div className="brand" title="Markit"><strong>Markit</strong></div>
       </div>
       <div className="titlebar-title" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()} title={active ? titleFor(active.path, locale) : 'Markit'}>
         <span className="titlebar-document">{active ? titleFor(active.path, locale) : 'Markit'}</span>
         {active && <span className={`titlebar-status ${active.dirty ? 'dirty' : ''}`} aria-label={active.dirty ? t('unsaved') : t('saved')} />}
       </div>
       <div className="titlebar-actions">
-        <button className="icon-button" title={t('language')} aria-label={t('language')} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><Languages size={16} /></button>
-        <button className="icon-button" title={t('settings')} aria-label={t('settings')} onClick={() => setShowSettings(true)}><Settings2 size={16} /></button>
         <div className="window-controls" aria-label="Window controls">
           <button className="window-control" title="Minimize" aria-label="Minimize" onClick={minimizeWindow}><Minus size={15} /></button>
           <button className="window-control" title="Maximize" aria-label="Maximize" onClick={() => void toggleMaximizeWindow()}><Square size={13} /></button>
@@ -467,11 +480,30 @@ export default function App() {
         </div>
       </div>
     </header>
+    {menuOpen && <>
+      <button className="menu-scrim" aria-label={t('closeMenu')} onClick={() => setMenuOpen(false)} />
+      <aside className="command-menu" aria-label={t('menu')}>
+        <div className="command-menu-header"><span className="command-menu-brand">Markit</span><button className="icon-button" title={t('closeMenu')} aria-label={t('closeMenu')} onClick={() => setMenuOpen(false)}><X size={17} /></button></div>
+        <nav className="command-menu-list">
+          <button onClick={() => { newDocument(); setMenuOpen(false); }}><Plus size={16} />{t('newDocument')}</button>
+          <button onClick={() => { void chooseDocument(); setMenuOpen(false); }}><FolderOpen size={16} />{t('open')}</button>
+          <button disabled={!active?.dirty} onClick={() => { void save(); setMenuOpen(false); }}><Save size={16} />{t('save')}</button>
+          <button onClick={() => { void exportDocument(); setMenuOpen(false); }}><Download size={16} />{t('exportHtml')}</button>
+          <button onClick={() => { imageInputRef.current?.click(); setMenuOpen(false); }}><ImagePlus size={16} />{t('image')}</button>
+          <div className="command-menu-rule" />
+          <button onClick={() => { setSidebarCollapsed(current => !current); setMenuOpen(false); }}><PanelLeft size={16} />{sidebarCollapsed ? t('showSidebar') : t('hideSidebar')}</button>
+          <button onClick={() => { setFocusMode(current => !current); setMenuOpen(false); }}><Menu size={16} />{focusMode ? t('exitFocus') : t('focusMode')}</button>
+          <button onClick={() => { setShowSettings(true); setMenuOpen(false); }}><Settings2 size={16} />{t('settings')}</button>
+          <button onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><Languages size={16} />{locale === 'zh-CN' ? t('english') : t('chinese')}</button>
+          {pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} onClick={() => { void runPluginCommand(command); setMenuOpen(false); }}><Play size={15} /><span>{command.title}</span></button>)}
+        </nav>
+      </aside>
+    </>}
     <div className="workspace">
       <aside className="sidebar">
         <div className="sidebar-tabs">
-          {([['files', FileText, t('files')], ['outline', Menu, t('outline')], ['search', Search, t('search')]] as const).map(([id, Icon, label]) => <button key={id} className={sidebar === id ? 'selected' : ''} title={label} aria-label={label} onClick={() => setSidebar(id)}><Icon size={16} /></button>)}
-          {pluginPanels.map(panel => <button key={`${panel.pluginId}:${panel.id}`} className={sidebar === 'plugin' && selectedPluginPanel?.pluginId === panel.pluginId && selectedPluginPanel.id === panel.id ? 'selected' : ''} title={panel.title} aria-label={panel.title} onClick={() => { setSidebar('plugin'); setSelectedPluginPanel(panel); }}><Puzzle size={16} /></button>)}
+          {([['files', t('files')], ['outline', t('outline')], ['search', t('search')]] as const).map(([id, label]) => <button key={id} className={sidebar === id ? 'selected' : ''} title={label} aria-label={label} onClick={() => setSidebar(id)}>{label}</button>)}
+          {pluginPanels.map(panel => <button key={`${panel.pluginId}:${panel.id}`} className={sidebar === 'plugin' && selectedPluginPanel?.pluginId === panel.pluginId && selectedPluginPanel.id === panel.id ? 'selected' : ''} title={panel.title} aria-label={panel.title} onClick={() => { setSidebar('plugin'); setSelectedPluginPanel(panel); }}>{panel.title}</button>)}
         </div>
         <div className="sidebar-content">
           {sidebar === 'files' && <><div className="sidebar-heading"><span>{t('files')}</span><span><button className="icon-button" title="Open folder" aria-label="Open folder" onClick={() => void chooseWorkspace()}><FolderOpen size={15} /></button><button className="icon-button" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={15} /></button></span></div><p className="workspace-path">{workspace || 'Local workspace'}</p>{entries.filter(entry => !entry.directory && /\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)).map(entry => <button key={entry.path} className={`file-row ${active?.path === entry.path ? 'active' : ''}`} onClick={() => void openPath(entry.path)}><FileText size={15} /><span>{entry.name}</span></button>)}{!entries.length && <button className="file-row active" onClick={() => void chooseDocument()}><FileText size={15} /><span>{active ? titleFor(active.path, locale) : t('emptyTitle')}</span></button>}</>}
@@ -486,7 +518,7 @@ export default function App() {
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
           <div className="editor-scroll"><div className="editor-column">{active.mode === 'source' ? <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} source={active.source} onChange={updateSource} onImageFiles={files => { void insertImages(files); }} /></Suspense> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor source={active.source} documentPath={active.path} citationMap={citationMap} onChange={updateSource} /></Suspense>}</div></div>
-          <footer className="statusbar"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></footer>
+          <footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarCollapsed ? t('showSidebar') : t('hideSidebar')} aria-label={sidebarCollapsed ? t('showSidebar') : t('hideSidebar')} onClick={() => setSidebarCollapsed(current => !current)}><PanelLeft size={14} /></button><button className="status-button status-mode" title={active.mode === 'source' ? t('live') : t('source')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: item.mode === 'source' ? 'live' : 'source' } : item))}>{active.mode === 'source' ? '</>' : 'A'}</button><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Menu size={14} /></button></div><div className="statusbar-right"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></div></footer>
         </> : <div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div>}
       </main>
     </div>
