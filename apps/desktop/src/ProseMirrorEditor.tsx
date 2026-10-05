@@ -75,6 +75,11 @@ function mathWidget(source: string, display: boolean) {
 
 function mathDecorations(state: EditorState): DecorationSet {
   const decorations: Decoration[] = [];
+  const selectionFrom = state.selection.from;
+  const selectionTo = state.selection.to;
+  const selectionTouches = (from: number, to: number) => selectionFrom === selectionTo
+    ? selectionFrom > from && selectionFrom < to
+    : selectionFrom < to && selectionTo > from;
   state.doc.descendants((node, position) => {
     if (node.type.name === 'code_block') return false;
     if (node.type.name === 'paragraph') {
@@ -82,6 +87,7 @@ function mathDecorations(state: EditorState): DecorationSet {
       if (blockMatch && node.content.size > 0) {
         const from = position + 1;
         const to = from + node.content.size;
+        if (selectionTouches(from, to)) return false;
         decorations.push(Decoration.inline(from, to, { class: 'md-math-source', 'aria-hidden': 'true' }));
         decorations.push(Decoration.widget(from, mathWidget(blockMatch[1].trim(), true), { side: -1, key: `display:${from}:${blockMatch[1]}` }));
         return false;
@@ -92,6 +98,7 @@ function mathDecorations(state: EditorState): DecorationSet {
       if (match.index === undefined) continue;
       const from = position + match.index;
       const to = from + match[0].length;
+      if (selectionTouches(from, to)) continue;
       decorations.push(Decoration.inline(from, to, { class: 'md-math-source', 'aria-hidden': 'true' }));
       decorations.push(Decoration.widget(from, mathWidget(match[1], false), { side: -1, key: `inline:${from}:${match[0]}` }));
     }
