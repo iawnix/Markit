@@ -2,7 +2,7 @@
   "name": "markit",
   "productName": "Markit",
   "desktopName": "com.markit.desktop",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "Markit lightweight cross-platform Markdown editor",
   "author": "Markit contributors",
