@@ -22,6 +22,14 @@ type PluginPanelContent = { status?: string; items?: PluginPanelItem[]; citation
 type PluginCommandContribution = { pluginId: string; id: string; title: string; shortcut?: string; visible?: boolean; host: PluginWorkerHost };
 type PluginPanelContribution = { pluginId: string; id: string; title: string; attribution?: string; searchCommand?: string; content?: PluginPanelContent };
 
+const FONT_STACKS = {
+  system: 'ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Noto Sans Mono CJK SC", monospace',
+  noto: '"Noto Sans Mono", "Noto Sans Mono CJK SC", "Noto Sans CJK SC", "DejaVu Sans Mono", monospace',
+  sarasa: '"Sarasa Mono SC", "Sarasa Mono", "Noto Sans Mono CJK SC", "Noto Sans CJK SC", "DejaVu Sans Mono", monospace',
+  jetbrains: '"JetBrains Mono", "Noto Sans Mono CJK SC", "Noto Sans CJK SC", "DejaVu Sans Mono", monospace',
+} as const;
+type EditorFont = keyof typeof FONT_STACKS;
+
 function titleFor(path: string | null, locale: Locale) {
   return path?.split(/[\\/]/).at(-1) || message(locale, 'untitled');
 }
@@ -34,6 +42,14 @@ function loadPlugins(): InstalledPlugin[] {
 
 export default function App() {
   const [locale, setLocale] = useState<Locale>(() => (localStorage.getItem('markit.locale') as Locale) || 'zh-CN');
+  const [editorFont, setEditorFont] = useState<EditorFont>(() => {
+    const stored = localStorage.getItem('markit.editorFont');
+    return stored && stored in FONT_STACKS ? stored as EditorFont : 'system';
+  });
+  const [editorFontSize, setEditorFontSize] = useState(() => {
+    const stored = Number(localStorage.getItem('markit.editorFontSize'));
+    return Number.isFinite(stored) ? Math.min(24, Math.max(12, stored)) : 16;
+  });
   const [sidebar, setSidebar] = useState<Sidebar>('outline');
   const [documents, setDocuments] = useState<DocumentSnapshot[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -123,6 +139,12 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [active?.id, active?.path, active?.revision?.hash, active?.revision?.size, active?.revision?.modifiedMs]);
   useEffect(() => { localStorage.setItem('markit.locale', locale); document.documentElement.lang = locale; }, [locale]);
+  useEffect(() => {
+    localStorage.setItem('markit.editorFont', editorFont);
+    localStorage.setItem('markit.editorFontSize', String(editorFontSize));
+    document.documentElement.style.setProperty('--editor-font-family', FONT_STACKS[editorFont]);
+    document.documentElement.style.setProperty('--editor-font-size', `${editorFontSize}px`);
+  }, [editorFont, editorFontSize]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setMenuOpen(false); return; }
@@ -556,6 +578,6 @@ export default function App() {
         </> : <><div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div><footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className="status-mode-option" title={t('source')} aria-label={t('source')} disabled><Code2 size={14} /></button><button className="status-mode-option" title={t('preview')} aria-label={t('preview')} disabled><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>0 {t('words')}</span><span>Local</span><span>{t('saved')}</span></div></footer></>}
       </main>
     </div>
-    {showSettings && <div className="modal-backdrop" onClick={() => setShowSettings(false)}><section className="settings-modal" onClick={event => event.stopPropagation()}><header><h2>{t('settings')}</h2><button className="icon-button" title="Close" aria-label="Close" onClick={() => setShowSettings(false)}><X size={18} /></button></header><div className="settings-row"><span>{t('language')}</span><button className="secondary-command" onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}>{locale === 'zh-CN' ? t('chinese') : t('english')}</button></div><div className="settings-section"><div className="settings-section-heading"><strong>{t('plugins')}</strong><button className="secondary-command" onClick={() => void choosePlugin()}><Upload size={14} />{t('installPlugin')}</button><input ref={pluginInputRef} hidden type="file" accept=".markit-plugin" onChange={event => { const file = event.target.files?.[0]; if (file) void file.arrayBuffer().then(bytes => installPlugin(new Uint8Array(bytes))); event.currentTarget.value = ''; }} /></div>{pluginError && <p className="plugin-error">{t('pluginInstallError')}: {pluginError}</p>}{plugins.length ? <div className="plugin-list">{plugins.map(plugin => <article className="plugin-row" key={plugin.manifest.id}><div className="plugin-info"><strong>{plugin.manifest.name}</strong><span>{plugin.manifest.id} · v{plugin.manifest.version}</span><small>{t('pluginPermissions')}: {plugin.manifest.permissions.length ? plugin.manifest.permissions.join(', ') : 'none'}</small></div><div className="plugin-actions">{(plugin.integrityVerified || plugin.signaturePresent) && <span title={plugin.integrityVerified ? t('pluginIntegrity') : t('pluginUnsigned')}><ShieldCheck size={14} /></span>}<button className="icon-button" title={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} aria-label={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} onClick={() => togglePlugin(plugin)}><span className={`plugin-toggle ${plugin.enabled ? 'enabled' : ''}`} /></button><button className="icon-button" title={t('removePlugin')} aria-label={t('removePlugin')} onClick={() => removePlugin(plugin)}><Trash2 size={14} /></button></div></article>)}</div> : <p className="empty-sidebar">{t('noPlugins')}</p>}</div></section></div>}
+    {showSettings && <div className="modal-backdrop" onClick={() => setShowSettings(false)}><section className="settings-modal" onClick={event => event.stopPropagation()}><header><h2>{t('settings')}</h2><button className="icon-button" title="Close" aria-label="Close" onClick={() => setShowSettings(false)}><X size={18} /></button></header><div className="settings-row"><span>{t('language')}</span><button className="secondary-command" onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}>{locale === 'zh-CN' ? t('chinese') : t('english')}</button></div><div className="settings-section editor-settings"><div className="settings-section-heading"><strong>{t('editorAppearance')}</strong></div><label className="settings-control"><span>{t('editorFont')}</span><select className="settings-select" value={editorFont} onChange={event => setEditorFont(event.target.value as EditorFont)}><option value="system">{t('fontSystem')}</option><option value="noto">{t('fontNoto')}</option><option value="sarasa">{t('fontSarasa')}</option><option value="jetbrains">{t('fontJetBrains')}</option></select></label><label className="settings-control"><span>{t('editorFontSize')}</span><span className="settings-range"><input type="range" min="12" max="24" step="1" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} /><output>{editorFontSize}px</output></span></label></div><div className="settings-section"><div className="settings-section-heading"><strong>{t('plugins')}</strong><button className="secondary-command" onClick={() => void choosePlugin()}><Upload size={14} />{t('installPlugin')}</button><input ref={pluginInputRef} hidden type="file" accept=".markit-plugin" onChange={event => { const file = event.target.files?.[0]; if (file) void file.arrayBuffer().then(bytes => installPlugin(new Uint8Array(bytes))); event.currentTarget.value = ''; }} /></div>{pluginError && <p className="plugin-error">{t('pluginInstallError')}: {pluginError}</p>}{plugins.length ? <div className="plugin-list">{plugins.map(plugin => <article className="plugin-row" key={plugin.manifest.id}><div className="plugin-info"><strong>{plugin.manifest.name}</strong><span>{plugin.manifest.id} · v{plugin.manifest.version}</span><small>{t('pluginPermissions')}: {plugin.manifest.permissions.length ? plugin.manifest.permissions.join(', ') : 'none'}</small></div><div className="plugin-actions">{(plugin.integrityVerified || plugin.signaturePresent) && <span title={plugin.integrityVerified ? t('pluginIntegrity') : t('pluginUnsigned')}><ShieldCheck size={14} /></span>}<button className="icon-button" title={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} aria-label={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} onClick={() => togglePlugin(plugin)}><span className={`plugin-toggle ${plugin.enabled ? 'enabled' : ''}`} /></button><button className="icon-button" title={t('removePlugin')} aria-label={t('removePlugin')} onClick={() => removePlugin(plugin)}><Trash2 size={14} /></button></div></article>)}</div> : <p className="empty-sidebar">{t('noPlugins')}</p>}</div></section></div>}
   </div>;
 }

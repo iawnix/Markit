@@ -11,6 +11,8 @@
   --text-faint: #687079;
   --border: #44494f;
   --editor-width: 760px;
+  --editor-font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Noto Sans Mono CJK SC", monospace;
+  --editor-font-size: 16px;
   --ease-out: cubic-bezier(.23, 1, .32, 1);
 }
 * { box-sizing: border-box; }
@@ -84,16 +86,16 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .external-change .secondary-command { flex: 0 0 auto; margin: 0; padding: 5px 8px; border-color: #806a4f; background: transparent; color: #e1c9a7; }
 .editor-scroll { min-height: 0; height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; }
 .editor-column { width: min(var(--editor-width), calc(100% - 64px)); height: 100%; min-height: 100%; margin: 0 auto; padding: 96px 0 130px; }
-.source-editor { width: 100%; min-height: calc(100vh - 120px); resize: none; border: 0; outline: 0; background: transparent; color: #d9dcdf; font-family: "SFMono-Regular", Consolas, monospace; font-size: 14px; line-height: 1.8; tab-size: 2; }
+.source-editor { width: 100%; min-height: calc(100vh - 120px); resize: none; border: 0; outline: 0; background: transparent; color: #d9dcdf; font-family: var(--editor-font-family); font-size: var(--editor-font-size); line-height: 1.8; tab-size: 2; }
 .source-editor-codemirror { width: 100%; height: 100%; min-height: 0; }
-.source-editor-codemirror .cm-editor { height: 100%; min-height: 0; outline: 0; background: transparent; color: #d9dcdf; font: 14px/1.8 "SFMono-Regular", Consolas, monospace; }
+.source-editor-codemirror .cm-editor { height: 100%; min-height: 0; outline: 0; background: transparent; color: #d9dcdf; font: var(--editor-font-size)/1.8 var(--editor-font-family); }
 .source-editor-codemirror .cm-scroller { height: 100%; overflow: auto; overscroll-behavior: contain; }
 .source-editor-codemirror .cm-content { min-height: 100%; padding: 0; caret-color: #d9dcdf; }
 .source-editor-codemirror .cm-gutters { border: 0; background: transparent; color: #656c73; }
 .source-editor-codemirror .cm-activeLine, .source-editor-codemirror .cm-activeLineGutter { background: transparent; }
 .source-editor-codemirror .cm-search-hit { border-radius: 2px; background: #9d8140; color: #fff; box-shadow: 0 0 0 1px #c5a95c66; }
 .live-editor, .pm-editor .ProseMirror { min-height: 480px; }
-.pm-editor { min-height: 480px; outline: 0; color: #d9dcdf; font-size: 16px; line-height: 1.85; }
+.pm-editor { min-height: 480px; outline: 0; color: #d9dcdf; font-family: var(--editor-font-family); font-size: var(--editor-font-size); line-height: 1.85; }
 .pm-editor .ProseMirror { outline: 0; }
 .pm-editor h1, .pm-editor h2, .pm-editor h3 { color: #eff0f1; line-height: 1.28; letter-spacing: 0; }
 .pm-editor h1 { padding-bottom: 13px; border-bottom: 1px solid #4b5055; font-size: 34px; }
@@ -102,7 +104,7 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .pm-editor .md-citation-source { font-size: 0; line-height: 0; }
 .pm-editor .md-citation-inline { display: inline-block; padding: 1px 5px; border-radius: 3px; background: #4b535b; color: #d6dce1; font-size: .78em; line-height: 1.45; vertical-align: .08em; }
 .pm-editor .md-search-hit { border-radius: 2px; background: #9d8140; color: #fff; box-shadow: 0 0 0 1px #c5a95c66; }
-.markdown-preview { color: #d9dcdf; font-size: 16px; line-height: 1.85; }
+.markdown-preview { color: #d9dcdf; font-family: var(--editor-font-family); font-size: var(--editor-font-size); line-height: 1.85; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0 0 18px; color: #eff0f1; line-height: 1.28; }
 .markdown-preview h1 { padding-bottom: 13px; border-bottom: 1px solid #4b5055; font-size: 34px; }
 .markdown-preview h2 { margin-top: 38px; padding-bottom: 8px; border-bottom: 1px solid #44494f; font-size: 25px; }
@@ -110,8 +112,8 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .markdown-preview p { margin: 0 0 16px; }
 .markdown-preview blockquote { margin: 18px 0; padding: 7px 17px; border-left: 3px solid #7c8994; background: #3c4146; color: #aeb5bb; }
 .markdown-preview li { margin: 4px 0; padding-left: 4px; list-style-position: inside; }
-.markdown-preview pre { overflow: auto; padding: 13px 15px; border: 1px solid var(--border); border-radius: 3px; background: #2a2d31; font: 13px/1.6 "SFMono-Regular", Consolas, monospace; }
-.markdown-preview code { padding: 2px 4px; border-radius: 3px; background: #41464c; color: #e0e3e5; font: .88em "SFMono-Regular", Consolas, monospace; }
+.markdown-preview pre { overflow: auto; padding: 13px 15px; border: 1px solid var(--border); border-radius: 3px; background: #2a2d31; font: 13px/1.6 var(--editor-font-family); }
+.markdown-preview code { padding: 2px 4px; border-radius: 3px; background: #41464c; color: #e0e3e5; font: .88em var(--editor-font-family); }
 .markdown-preview pre code { padding: 0; background: transparent; }
 .markdown-preview table { width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 14px; }
 .markdown-preview th, .markdown-preview td { padding: 7px 9px; border: 1px solid #4b5055; text-align: left; }
@@ -160,6 +162,12 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .settings-section { padding: 4px 18px 20px; }
 .settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; color: #e0e2e4; font-size: 13px; }
 .settings-section-heading .secondary-command { margin: 0; padding: 6px 9px; }
+.settings-control { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 42px; color: var(--text-muted); font-size: 13px; }
+.settings-select { min-width: 220px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 3px; outline: 0; background: #292c30; color: var(--text); font-size: 12px; }
+.settings-select:focus { border-color: #737d87; box-shadow: 0 0 0 2px #737d8726; }
+.settings-range { display: inline-flex; align-items: center; gap: 10px; min-width: 220px; }
+.settings-range input { width: 170px; accent-color: #a4b0ba; }
+.settings-range output { width: 38px; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
 .plugin-list { display: flex; flex-direction: column; gap: 7px; }
 .plugin-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 3px; background: #292c30; }
 .plugin-info { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
