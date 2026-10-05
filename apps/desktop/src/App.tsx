@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
 import { Download, FileText, FolderOpen, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
@@ -120,6 +120,10 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [active?.id, active?.path, active?.revision?.hash, active?.revision?.size, active?.revision?.modifiedMs]);
   useEffect(() => { localStorage.setItem('markit.locale', locale); document.documentElement.lang = locale; }, [locale]);
+  useEffect(() => {
+    if (!isTauriRuntime) return;
+    void getCurrentWindow().setDecorations(false).catch(() => undefined);
+  }, []);
   useEffect(() => { documentsRef.current = documents; }, [documents]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => {
@@ -432,6 +436,10 @@ export default function App() {
 
   const filteredHeadings = useMemo(() => headings.filter(item => item.text.toLowerCase().includes(query.toLowerCase())), [headings, query]);
   const closeDocument = (id: string) => { setDocuments(current => current.filter(item => item.id !== id)); if (activeId === id) setActiveId(documents.find(item => item.id !== id)?.id || null); };
+  const dragWindow = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0 || !isTauriRuntime) return;
+    void getCurrentWindow().startDragging().catch(() => undefined);
+  };
   const minimizeWindow = () => { if (isTauriRuntime) void getCurrentWindow().minimize().catch(() => undefined); };
   const toggleMaximizeWindow = async () => {
     if (!isTauriRuntime) return;
@@ -442,10 +450,10 @@ export default function App() {
 
   return <div className="markit-app">
     <header className="titlebar">
-      <div className="titlebar-left" data-tauri-drag-region="true">
+      <div className="titlebar-left" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()}>
         <div className="brand" title="Markit"><span className="brand-mark">M</span><strong>Markit</strong></div>
       </div>
-      <div className="titlebar-title" data-tauri-drag-region="true" title={active ? titleFor(active.path, locale) : 'Markit'}>
+      <div className="titlebar-title" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()} title={active ? titleFor(active.path, locale) : 'Markit'}>
         <span className="titlebar-document">{active ? titleFor(active.path, locale) : 'Markit'}</span>
         {active && <span className={`titlebar-status ${active.dirty ? 'dirty' : ''}`} aria-label={active.dirty ? t('unsaved') : t('saved')} />}
       </div>

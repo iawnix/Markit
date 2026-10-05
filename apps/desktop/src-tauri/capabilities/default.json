@@ -3,5 +3,16 @@
   "identifier": "default",
   "description": "Markit desktop capabilities",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:default", "core:event:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-set-decorations",
+    "core:window:allow-start-dragging",
+    "core:window:allow-unmaximize",
+    "core:event:default",
+    "dialog:default"
+  ]
 }

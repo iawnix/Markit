@@ -2,22 +2,25 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 820px; min-height: 100vh; background: #f3f4f1; }
 button, input, textarea { font: inherit; }
+button { border: 0; cursor: pointer; color: inherit; }
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid #86aa92; outline-offset: 2px; }
 .markit-app { min-height: 100vh; display: flex; flex-direction: column; background: #f3f4f1; }
-.titlebar { position: relative; height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 8px 0 18px; background: #f3f4f1; user-select: none; }
+.titlebar { position: relative; height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 8px 0 18px; background: #f3f4f1; user-select: none; }
 .titlebar-left { display: flex; align-items: center; min-width: 170px; }
-.brand { display: flex; align-items: center; gap: 8px; color: #637067; font-size: 12px; letter-spacing: .02em; }
-.brand-mark { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #c8d9cb; border-radius: 7px; background: #e5eee6; color: #2d6a52; font-weight: 750; font-size: 12px; }
+.brand { display: flex; align-items: center; gap: 8px; color: #58665d; font-size: 12px; letter-spacing: .02em; }
+.brand-mark { width: auto; height: auto; display: block; color: #2d6a52; font-weight: 750; font-size: 14px; line-height: 1; }
 .titlebar-title { position: absolute; left: 50%; display: flex; align-items: center; justify-content: center; gap: 8px; width: min(42%, 420px); min-width: 0; transform: translateX(-50%); color: #536057; font-size: 12px; font-weight: 550; }
 .titlebar-document { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .titlebar-status { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #8eb49b; box-shadow: 0 0 0 3px #e2eee5; }
 .titlebar-status.dirty { background: #bf8154; box-shadow: 0 0 0 3px #f3e6db; }
 .titlebar-actions, .sidebar-tabs, .document-tabs, .editor-toolbar, .statusbar { display: flex; align-items: center; }
-.titlebar-actions { gap: 2px; margin-left: auto; }
-.icon-button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: transparent; color: #89958d; transition: background-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out; }
+.titlebar-actions { display: flex; flex: 0 0 auto; gap: 2px; margin-left: auto; }
+.icon-button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: transparent; color: #89958d; transition: background-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out; }
 .icon-button:hover { background: #e8ede8; color: #2d6a52; }
 .icon-button:active { transform: scale(.96); }
-.window-controls { display: flex; align-self: stretch; margin-left: 5px; }
-.window-control { width: 40px; height: 100%; display: grid; place-items: center; border-radius: 0; background: transparent; color: #7c8880; transition: background-color 140ms ease-out, color 140ms ease-out; }
+.window-controls { display: flex; align-self: stretch; margin-left: 8px; padding-left: 5px; border-left: 1px solid #e0e6e0; }
+.window-control { width: 36px; height: 100%; display: grid; place-items: center; border-radius: 5px; background: transparent; color: #7c8880; transition: background-color 140ms ease-out, color 140ms ease-out; }
 .window-control:hover { background: #e7ece7; color: #31453a; }
 .window-control:active { background: #dce5dd; }
 .window-control-close:hover { background: #c94f4f; color: #fff; }
@@ -137,4 +140,4 @@ button, input, textarea { font: inherit; }
 .plugin-panel-item:hover:not(:disabled) { background: #eaf0eb; color: #245b45; }
 .plugin-panel-item strong { overflow: hidden; color: #526056; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-panel-item small { overflow: hidden; color: #8b958e; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 900px) { body { min-width: 0; } .sidebar { width: 210px; } .editor-column { width: min(860px, calc(100% - 40px)); } .titlebar-left { min-width: 90px; } .brand strong { display: none; } .titlebar-title { width: min(38%, 300px); } .window-control { width: 36px; } }
+@media (max-width: 900px) { body { min-width: 0; } .sidebar { width: 210px; } .editor-column { width: min(860px, calc(100% - 40px)); } .titlebar-left { min-width: 90px; } .brand strong { display: none; } .titlebar-title { width: min(38%, 300px); } .window-control { width: 34px; } }
