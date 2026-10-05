@@ -7,7 +7,7 @@ import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
 import { markdownParser, markdownSerializer } from '../../../packages/editor/src/prosemirror';
 
-interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; onChange(source: string): void }
+interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onChange(source: string): void }
 
 interface Projection { source: string; mappings: Map<string, string> }
 
@@ -34,6 +34,22 @@ function citationDecorations(state: EditorState, citationMap: Record<string, num
       widget.contentEditable = 'false';
       decorations.push(Decoration.inline(from, to, { class: 'md-citation-source', 'aria-hidden': 'true' }));
       decorations.push(Decoration.widget(from, widget, { side: -1, key: `${from}:${raw}:${label}` }));
+    }
+  });
+  return DecorationSet.create(state.doc, decorations);
+}
+
+function searchDecorations(state: EditorState, query: string): DecorationSet {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return DecorationSet.empty;
+  const decorations: Decoration[] = [];
+  state.doc.descendants((node, position) => {
+    if (!node.isText || !node.text) return;
+    const text = node.text.toLocaleLowerCase();
+    let offset = text.indexOf(needle);
+    while (offset >= 0) {
+      decorations.push(Decoration.inline(position + offset, position + offset + needle.length, { class: 'md-search-hit' }));
+      offset = text.indexOf(needle, offset + Math.max(1, needle.length));
     }
   });
   return DecorationSet.create(state.doc, decorations);
@@ -71,22 +87,28 @@ function restoreImages(source: string, mappings: Map<string, string>): string {
   return restored;
 }
 
-export function ProseMirrorEditor({ source, documentPath, citationMap = {}, onChange }: Props) {
+export function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', onChange }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const sourceRef = useRef(source);
   const changeRef = useRef(onChange);
   const citationMapRef = useRef(citationMap);
+  const searchQueryRef = useRef(searchQuery);
   const projectionRef = useRef({ source: '', documentPath: null as string | null, mappings: new Map<string, string>() });
   changeRef.current = onChange;
   citationMapRef.current = citationMap;
+  searchQueryRef.current = searchQuery;
 
   useEffect(() => {
     if (!host.current) return;
     const editor = new EditorView(host.current, {
       state: EditorState.create({
         doc: markdownParser.parse(source),
-        plugins: [history(), keymap(baseKeymap), new Plugin({ props: { decorations: state => citationDecorations(state, citationMapRef.current) } })],
+        plugins: [history(), keymap(baseKeymap), new Plugin({ props: { decorations: state => {
+          const citations = citationDecorations(state, citationMapRef.current).find();
+          const matches = searchDecorations(state, searchQueryRef.current).find();
+          return DecorationSet.create(state.doc, [...citations, ...matches]);
+        } } })],
       }),
       dispatchTransaction(transaction) {
         const next = editor.state.apply(transaction);
@@ -107,6 +129,11 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, onCh
     const editor = view.current;
     if (editor) editor.dispatch(editor.state.tr.setMeta('markitCitationMap', true));
   }, [citationMap]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (editor) editor.dispatch(editor.state.tr.setMeta('markitSearchQuery', true));
+  }, [searchQuery]);
 
   useEffect(() => {
     const editor = view.current;

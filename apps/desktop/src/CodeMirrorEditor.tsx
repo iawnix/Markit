@@ -2,8 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { markdown } from '@codemirror/lang-markdown';
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { SearchQuery, search, setSearchQuery } from '@codemirror/search';
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { Decoration, EditorView, keymap, MatchDecorator, ViewPlugin } from '@codemirror/view';
 
 export interface SourceEditorHandle {
   focus(): void;
@@ -13,18 +14,21 @@ export interface SourceEditorHandle {
 
 interface Props {
   source: string;
+  searchQuery?: string;
   onChange(source: string): void;
   onImageFiles?(files: File[]): void;
 }
 
-export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function CodeMirrorEditor({ source, onChange, onImageFiles }, ref) {
+export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function CodeMirrorEditor({ source, searchQuery = '', onChange, onImageFiles }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const onImageFilesRef = useRef(onImageFiles);
+  const searchQueryRef = useRef(searchQuery);
   const syncingRef = useRef(false);
   onChangeRef.current = onChange;
   onImageFilesRef.current = onImageFiles;
+  searchQueryRef.current = searchQuery;
 
   useImperativeHandle(ref, () => ({
     focus() { viewRef.current?.focus(); },
@@ -49,6 +53,25 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           syntaxHighlighting(defaultHighlightStyle),
+          search(),
+          ViewPlugin.fromClass(class {
+            decorations = Decoration.none;
+            query = '';
+
+            constructor(view: EditorView) { this.refresh(view); }
+
+            update(update: { view: EditorView; docChanged: boolean; viewportChanged: boolean }) {
+              const query = searchQueryRef.current.trim();
+              if (query !== this.query || update.docChanged || update.viewportChanged) this.refresh(update.view);
+            }
+
+            refresh(view: EditorView) {
+              this.query = searchQueryRef.current.trim();
+              if (!this.query) { this.decorations = Decoration.none; return; }
+              const escaped = this.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              this.decorations = new MatchDecorator({ regexp: new RegExp(escaped, 'giu'), decoration: Decoration.mark({ class: 'cm-search-hit' }) }).createDeco(view);
+            }
+          }, { decorations: value => value.decorations }),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ 'aria-label': 'Markdown source editor', spellcheck: 'false', autocapitalize: 'off' }),
           EditorView.domEventHandlers({
@@ -88,6 +111,12 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: source } });
     syncingRef.current = false;
   }, [source]);
+
+  useEffect(() => {
+    const editor = viewRef.current;
+    if (!editor) return;
+    editor.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: searchQuery })) });
+  }, [searchQuery]);
 
   return <div ref={host} className="source-editor-codemirror" />;
 });
