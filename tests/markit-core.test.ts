@@ -22,6 +22,21 @@ describe('Markit Markdown core', () => {
     expect(isLosslessCandidate('<!-- custom -->\n')).toBe(false);
   });
 
+  it('keeps GFM tables and strikethrough in the live projection', () => {
+    const source = '| Name | Value |\n| :--- | ---: |\n| ~~Old~~ | **42** |\n';
+    const serialized = serializeMarkdown(parseMarkdown(source).document);
+    expect(serialized).toContain('| Name | Value |');
+    expect(serialized).toContain('| :--- | ---: |');
+    expect(serialized).toContain('~~Old~~');
+    expect(serialized).toContain('**42**');
+  });
+
+  it('round-trips highlight marks in the live projection', () => {
+    const source = 'A ==highlight== and ~~removed~~.';
+    expect(serializeMarkdown(parseMarkdown(source).document)).toContain('==highlight==');
+    expect(serializeMarkdown(parseMarkdown(source).document)).toContain('~~removed~~');
+  });
+
   it('exports a complete HTML document without enabling raw HTML', () => {
     const html = renderHtmlDocument('# Title\n\n<script>alert(1)</script>\n', 'A <title>');
     expect(html).toContain('<!doctype html>');

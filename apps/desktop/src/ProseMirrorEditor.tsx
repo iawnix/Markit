@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { baseKeymap, chainCommands, createParagraphNear, exitCode, liftEmptyBlock, newlineInCode, splitBlock } from 'prosemirror-commands';
+import { baseKeymap, chainCommands, createParagraphNear, exitCode, liftEmptyBlock, newlineInCode, splitBlock, toggleMark } from 'prosemirror-commands';
 import { InputRule, inputRules, textblockTypeInputRule, undoInputRule, wrappingInputRule } from 'prosemirror-inputrules';
 import { history, redo, undo } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import type { MarkType } from 'prosemirror-model';
 import { EditorState, Plugin } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
+import { tableEditing } from 'prosemirror-tables';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
 import { markdownParser, markdownSerializer } from '../../../packages/editor/src/prosemirror';
@@ -66,6 +67,30 @@ function searchDecorations(state: EditorState, query: string): DecorationSet {
       decorations.push(Decoration.inline(position + offset, position + offset + needle.length, { class: 'md-search-hit' }));
       offset = text.indexOf(needle, offset + Math.max(1, needle.length));
     }
+  });
+  return DecorationSet.create(state.doc, decorations);
+}
+
+function taskDecorations(state: EditorState, onToggle: (from: number, checked: boolean) => void): DecorationSet {
+  const decorations: Decoration[] = [];
+  const selectionFrom = state.selection.from;
+  const selectionTo = state.selection.to;
+  state.doc.descendants((node, position, parent) => {
+    if (!node.isText || !node.text || parent?.type.name !== 'paragraph') return;
+    const match = /^\[([ xX])\]\s/.exec(node.text);
+    if (!match) return;
+    const from = position;
+    const to = from + match[0].length;
+    if (selectionFrom <= to && selectionTo >= from) return;
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'md-task-checkbox';
+    checkbox.checked = match[1].toLowerCase() === 'x';
+    checkbox.setAttribute('aria-label', checkbox.checked ? 'Completed task' : 'Incomplete task');
+    checkbox.addEventListener('mousedown', event => event.stopPropagation());
+    checkbox.addEventListener('change', () => onToggle(from, checkbox.checked));
+    decorations.push(Decoration.inline(from, to, { class: 'md-task-source', 'aria-hidden': 'true' }));
+    decorations.push(Decoration.widget(from, checkbox, { side: -1, key: `task:${from}:${checkbox.checked}` }));
   });
   return DecorationSet.create(state.doc, decorations);
 }
@@ -142,6 +167,8 @@ function createLiveInputRules(schema: typeof markdownParser['schema']) {
   const strong = schema.marks.strong;
   const em = schema.marks.em;
   const code = schema.marks.code;
+  const strike = schema.marks.strike;
+  const highlight = schema.marks.highlight;
   return [
     textblockTypeInputRule(/^(#{1,6})\s$/, heading, match => ({ level: match[1].length })),
     textblockTypeInputRule(/^```([A-Za-z0-9_-]+)?\s?$/, codeBlock, match => ({ params: match[1] || null })),
@@ -153,6 +180,8 @@ function createLiveInputRules(schema: typeof markdownParser['schema']) {
     markInputRule(/(^|[^\w])(\*)(?=\S)([^*_]+?\S)\2$/, em),
     markInputRule(/(^|[^\w])(_)(?=\S)([^*_]+?\S)\2$/, em),
     markInputRule(/(^|[^\w])(`)(?=\S)([^`]+?\S)\2$/, code),
+    markInputRule(/(^|[^\w])(~~)(?=\S)([^~]+?\S)\2$/, strike),
+    markInputRule(/(^|[^\w])(==)(?=\S)([^=]+?\S)\2$/, highlight),
   ];
 }
 
@@ -208,10 +237,14 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
         plugins: [
           history(),
           inputRules({ rules: createLiveInputRules(markdownParser.schema) }),
+          tableEditing(),
           keymap({
             ...baseKeymap,
             Enter: chainCommands(exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
             Backspace: chainCommands(undoInputRule, deleteEmptyHeading, baseKeymap.Backspace),
+            'Mod-b': toggleMark(markdownParser.schema.marks.strong),
+            'Mod-i': toggleMark(markdownParser.schema.marks.em),
+            'Mod-Shift-x': toggleMark(markdownParser.schema.marks.strike),
             'Mod-z': undo,
             'Mod-y': redo,
             'Mod-Shift-z': redo,
@@ -220,7 +253,12 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
           const citations = citationDecorations(state, citationMapRef.current).find();
           const math = mathDecorations(state).find();
           const matches = searchDecorations(state, searchQueryRef.current).find();
-          return DecorationSet.create(state.doc, [...citations, ...math, ...matches]);
+          const tasks = taskDecorations(state, (from, checked) => {
+            const currentEditor = view.current;
+            if (!currentEditor) return;
+            currentEditor.dispatch(currentEditor.state.tr.insertText(checked ? '[x] ' : '[ ] ', from, from + 4));
+          }).find();
+          return DecorationSet.create(state.doc, [...citations, ...math, ...matches, ...tasks]);
           } } }),
         ],
       }),

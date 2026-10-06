@@ -122,6 +122,8 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .pm-editor blockquote { margin: 18px 0; padding: 7px 17px; border-left: 3px solid #7c8994; background: var(--quote-background); color: var(--quote-text); }
 .pm-editor .md-citation-source { font-size: 0; line-height: 0; }
 .pm-editor .md-citation-inline { display: inline-block; padding: 1px 5px; border-radius: 3px; background: var(--tab-active); color: var(--code-text); font-size: .78em; line-height: 1.45; vertical-align: .08em; }
+.pm-editor .md-task-source { font-size: 0; line-height: 0; }
+.pm-editor .md-task-checkbox { width: 14px; height: 14px; margin: 0 6px 0 1px; vertical-align: -2px; accent-color: var(--accent); cursor: pointer; }
 .pm-editor .md-math-source { font-size: 0; line-height: 0; }
 .pm-editor .md-math-inline { display: inline-block; color: var(--heading); font-size: 1em; line-height: 1; vertical-align: -.08em; }
 .pm-editor .md-math-display { display: block; overflow-x: auto; padding: 8px 0; color: var(--heading); text-align: center; }
@@ -129,6 +131,11 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .pm-editor pre { overflow: auto; margin: 18px 0; padding: 13px 15px; border: 1px solid var(--border); border-radius: 3px; background: var(--code-background); color: var(--code-text); font: 13px/1.6 var(--editor-font-family); white-space: pre-wrap; }
 .pm-editor code { padding: 2px 4px; border-radius: 3px; background: var(--tab-active); color: var(--code-text); font: .88em var(--editor-font-family); }
 .pm-editor pre code { padding: 0; background: transparent; }
+.pm-editor s { text-decoration-color: var(--text-muted); }
+.pm-editor table { width: 100%; margin: 20px 0; border-collapse: collapse; table-layout: fixed; }
+.pm-editor th, .pm-editor td { min-width: 90px; padding: 7px 9px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+.pm-editor th { background: var(--quote-background); font-weight: 650; }
+.pm-editor .selectedCell { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .markdown-preview { color: var(--text); font-family: var(--editor-font-family); font-size: var(--editor-font-size); line-height: 1.85; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0 0 18px; color: var(--heading); line-height: 1.28; }
 .markdown-preview h1 { padding-bottom: 13px; border-bottom: 1px solid var(--rule); font-size: 34px; }
