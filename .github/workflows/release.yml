@@ -59,6 +59,8 @@ jobs:
 
       - run: npm ci
       - run: npx tsc -p apps/desktop/tsconfig.json --noEmit
+      - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check
+      - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
       - name: Build Tauri bundles
         if: matrix.platform == 'linux'
