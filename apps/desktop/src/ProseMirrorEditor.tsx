@@ -5,7 +5,7 @@ import { baseKeymap, chainCommands, createParagraphNear, exitCode, liftEmptyBloc
 import { InputRule, inputRules, textblockTypeInputRule, undoInputRule, wrappingInputRule } from 'prosemirror-inputrules';
 import { history, redo, undo } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
-import type { MarkType } from 'prosemirror-model';
+import type { MarkType, Node as ProseMirrorNode } from 'prosemirror-model';
 import { EditorState, Plugin, TextSelection } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
 import { addRowAfter, goToNextCell, isInTable, selectedRect, tableEditing } from 'prosemirror-tables';
@@ -47,28 +47,57 @@ function linkInputRule(linkType: MarkType): InputRule {
   });
 }
 
-function selectedLinkHref(state: EditorState): string {
+interface LinkTarget { from: number; to: number; href: string }
+
+function linkMarkHref(node: ProseMirrorNode | null | undefined, link: MarkType): string {
+  const mark = node?.marks.find(item => item.type === link);
+  return typeof mark?.attrs.href === 'string' ? mark.attrs.href : '';
+}
+
+function linkTarget(state: EditorState): LinkTarget | null {
   const { from, to } = state.selection;
-  if (from === to) return '';
   const link = state.schema.marks.link;
-  let current = '';
-  state.doc.nodesBetween(from, to, node => {
-    const mark = node.marks.find(item => item.type === link);
-    if (mark && typeof mark.attrs.href === 'string') current = mark.attrs.href;
+  if (from !== to) {
+    let href = '';
+    state.doc.nodesBetween(from, to, node => {
+      href = linkMarkHref(node, link) || href;
+    });
+    return { from, to, href };
+  }
+  const resolved = state.doc.resolve(from);
+  const parentStart = resolved.start();
+  let candidate = -1;
+  let offset = parentStart;
+  resolved.parent.forEach((node, _childOffset, index) => {
+    const start = offset;
+    const end = start + node.nodeSize;
+    if (node.isText && linkMarkHref(node, link) && ((from > start && from < end) || from === end || (from === start && candidate < 0))) candidate = index;
+    offset = end;
   });
-  return current;
+  if (candidate < 0) return null;
+  const candidateHref = linkMarkHref(resolved.parent.child(candidate), link);
+  const isLinked = (index: number) => linkMarkHref(resolved.parent.child(index), link) === candidateHref;
+  let first = candidate;
+  let last = candidate;
+  while (first > 0 && isLinked(first - 1)) first -= 1;
+  while (last + 1 < resolved.parent.childCount && isLinked(last + 1)) last += 1;
+  let targetFrom = parentStart;
+  for (let index = 0; index < first; index += 1) targetFrom += resolved.parent.child(index).nodeSize;
+  let targetTo = targetFrom;
+  for (let index = first; index <= last; index += 1) targetTo += resolved.parent.child(index).nodeSize;
+  return { from: targetFrom, to: targetTo, href: candidateHref };
 }
 
 function editLink(state: EditorState, dispatch: ((transaction: Transaction) => void) | undefined, promptText: string): boolean {
-  const { from, to } = state.selection;
-  if (from === to) return false;
+  const target = linkTarget(state);
+  if (!target) return false;
   const link = state.schema.marks.link;
-  const href = window.prompt(promptText, selectedLinkHref(state) || 'https://');
+  const href = window.prompt(promptText, target.href || 'https://');
   if (href === null) return true;
   if (dispatch) {
-    const transaction = state.tr.removeMark(from, to, link);
+    const transaction = state.tr.removeMark(target.from, target.to, link);
     const safeHref = safeLinkHref(href);
-    if (safeHref) transaction.addMark(from, to, link.create({ href: safeHref, title: null }));
+    if (safeHref) transaction.addMark(target.from, target.to, link.create({ href: safeHref, title: null }));
     dispatch(transaction.scrollIntoView());
   }
   return true;
@@ -326,15 +355,14 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
             'Mod-k': (state, dispatch) => {
               const requestLink = onRequestLinkRef.current;
               if (!requestLink) return editLink(state, dispatch, linkPromptRef.current);
-              const { from, to } = state.selection;
-              if (from === to) return false;
-              const currentHref = selectedLinkHref(state);
-              void requestLink(currentHref).then(href => {
+              const target = linkTarget(state);
+              if (!target) return false;
+              void requestLink(target.href).then(href => {
                 if (href === null) return;
                 const currentEditor = view.current;
                 if (!currentEditor) return;
-                const start = Math.min(from, currentEditor.state.doc.content.size);
-                const end = Math.min(to, currentEditor.state.doc.content.size);
+                const start = Math.min(target.from, currentEditor.state.doc.content.size);
+                const end = Math.min(target.to, currentEditor.state.doc.content.size);
                 if (start >= end) return;
                 const link = currentEditor.state.schema.marks.link;
                 const transaction = currentEditor.state.tr.removeMark(start, end, link);
