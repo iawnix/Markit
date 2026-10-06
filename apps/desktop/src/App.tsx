@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
-import { Code2, Download, Eye, FileText, FolderOpen, Focus, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
+import { Code2, Download, Eye, FileText, FolderOpen, Focus, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Printer, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
 import { getCurrentWindow, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
 import { clearRecovery, exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
-import { renderHtmlDocument } from '../../../packages/markdown/src/index';
+import { renderHtmlDocument, renderMarkdown } from '../../../packages/markdown/src/index';
 import { patchSource, replaceText } from '../../../packages/editor/src/source-map';
 import { parsePluginPackage } from '../../../packages/plugin-sdk/src/package';
 import { requiresPrompt } from '../../../packages/plugin-sdk/src/permissions';
@@ -466,6 +466,12 @@ export default function App() {
     } catch (error) { reportError(error); }
   }
 
+  function printDocument() {
+    if (!active) return;
+    // The print stylesheet replaces the app chrome with the sanitized Markdown projection.
+    window.print();
+  }
+
   function updateSource(source: string) {
     if (!active) return;
     setDocuments(current => current.map(item => item.id === active.id ? { ...item, source, dirty: source !== item.savedSource } : item));
@@ -829,6 +835,7 @@ export default function App() {
           <button onClick={() => { void chooseDocument(); setMenuOpen(false); }}><FolderOpen size={16} />{t('open')}</button>
           <button disabled={!active?.dirty} onClick={() => { void save(); setMenuOpen(false); }}><Save size={16} />{t('save')}</button>
           <button onClick={() => { void exportDocument(); setMenuOpen(false); }}><Download size={16} />{t('exportHtml')}</button>
+          <button onClick={() => { printDocument(); setMenuOpen(false); }}><Printer size={16} />{t('printPdf')}</button>
           <button onClick={() => { imageInputRef.current?.click(); setMenuOpen(false); }}><ImagePlus size={16} />{t('image')}</button>
           <div className="command-menu-rule" />
           <button onClick={() => { toggleSidebar(); setMenuOpen(false); }}><PanelLeft size={16} />{sidebarIsVisible ? t('hideSidebar') : t('showSidebar')}</button>
@@ -859,6 +866,7 @@ export default function App() {
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
           <div ref={editorScrollRef} className="editor-scroll"><div className={`editor-column ${active.mode === 'source' ? 'source-editor-column' : 'live-editor-column'}`}>{active.mode === 'source' ? <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} source={active.source} searchQuery={query} onChange={updateSource} onImageFiles={files => { void insertImages(files); }} /></Suspense> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor ref={editorRef} source={active.source} documentPath={active.path} citationMap={citationMap} searchQuery={query} onRequestLink={requestLinkEditor} onChange={updateSource} onImageFiles={(files, position) => { void insertImages(files, position); }} /></Suspense>}</div></div>
+          <div className="print-document" aria-hidden="true" dangerouslySetInnerHTML={{ __html: renderMarkdown(active.source, citationMap) }} />
           <footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className={`status-mode-option ${active.mode === 'source' ? 'selected' : ''}`} title={t('source')} aria-label={t('source')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}><Code2 size={14} /></button><button className={`status-mode-option ${active.mode === 'live' ? 'selected' : ''}`} title={t('preview')} aria-label={t('preview')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></div></footer>
         </> : <><div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div><footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className="status-mode-option" title={t('source')} aria-label={t('source')} disabled><Code2 size={14} /></button><button className="status-mode-option" title={t('preview')} aria-label={t('preview')} disabled><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>0 {t('words')}</span><span>Local</span><span>{t('saved')}</span></div></footer></>}
       </main>

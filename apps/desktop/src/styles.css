@@ -251,6 +251,25 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .plugin-panel-item:hover:not(:disabled) { background: var(--surface-hover); }
 .plugin-panel-item strong { overflow: hidden; color: var(--text-muted); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-panel-item small { overflow: hidden; color: var(--text-faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.print-document { display: none; }
+@media print {
+  @page { margin: 20mm 18mm; }
+  html, body, #root { height: auto; min-height: 0; overflow: visible; background: #fff; }
+  body { min-width: 0; color: #20252a; }
+  .markit-app { display: block; height: auto; min-height: 0; background: #fff; color: #20252a; }
+  .titlebar, .sidebar, .document-tabs, .editor-toolbar, .editor-scroll, .statusbar, .modal-backdrop, .error-toast, .menu-scrim, .command-menu { display: none !important; }
+  .workspace, .main-panel { display: block; height: auto; overflow: visible; }
+  .print-document { display: block; max-width: none; color: #20252a; font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace; font-size: 11pt; line-height: 1.7; }
+  .print-document h1, .print-document h2, .print-document h3, .print-document h4, .print-document h5, .print-document h6 { color: #11161a; break-after: avoid; }
+  .print-document h1 { padding-bottom: 5pt; border-bottom: 1px solid #cfd5da; }
+  .print-document h2 { margin-top: 20pt; padding-bottom: 3pt; border-bottom: 1px solid #e0e4e7; }
+  .print-document pre, .print-document table, .print-document blockquote, .print-document img { break-inside: avoid; }
+  .print-document pre { overflow: visible; white-space: pre-wrap; padding: 8pt 10pt; border: 1px solid #d7dde1; background: #f4f6f7; }
+  .print-document code { color: #20252a; background: #edf0f2; }
+  .print-document blockquote { padding-left: 10pt; border-left: 2pt solid #8b969f; color: #4c5962; }
+  .print-document img { max-width: 100%; }
+  .print-document a { color: #20252a; text-decoration: underline; }
+}
 @media (max-width: 900px) {
   body { min-width: 0; }
   .sidebar-tabs { gap: 20px; padding-inline: 18px; }
