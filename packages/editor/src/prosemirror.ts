@@ -56,6 +56,15 @@ function rawCommentRule(state: StateBlock, startLine: number, endLine: number, s
   return rawBlockToken(state, startLine, closingLine + 1);
 }
 
+function rawDirectiveRule(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
+  if (state.level !== 0 || !/^ {0,3}:::[A-Za-z][\w-]*(?:\s.*)?$/.test(lineText(state, startLine))) return false;
+  let closingLine = startLine + 1;
+  while (closingLine < endLine && !/^ {0,3}:::\s*$/.test(lineText(state, closingLine))) closingLine += 1;
+  if (closingLine >= endLine) return false;
+  if (silent) return true;
+  return rawBlockToken(state, startLine, closingLine + 1);
+}
+
 function rawFenceRule(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
   if (state.level !== 0) return false;
   const opening = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)/.exec(lineText(state, startLine));
@@ -127,6 +136,7 @@ markdownTokenizer.core.ruler.after('footnote_tail', 'markit_footnote_metadata', 
 });
 markdownTokenizer.block.ruler.before('hr', 'markit_front_matter', rawFrontMatterRule);
 markdownTokenizer.block.ruler.before('html_block', 'markit_comment', rawCommentRule);
+markdownTokenizer.block.ruler.before('paragraph', 'markit_directive', rawDirectiveRule);
 markdownTokenizer.block.ruler.before('fence', 'markit_raw_fence', rawFenceRule);
 markdownTokenizer.inline.ruler.before('emphasis', 'markit_highlight', (state, silent) => {
   const match = /^==(?=\S)([^=]+?\S)==/.exec(state.src.slice(state.pos));

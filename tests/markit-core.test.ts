@@ -59,6 +59,12 @@ describe('Markit Markdown core', () => {
     expect(serializeMarkdown(parseMarkdown(source).document)).toContain(source);
   });
 
+  it('keeps common inline HTML and custom directive text stable', () => {
+    const source = 'Use <kbd>Ctrl</kbd> here.\n\n:::note\nKeep this block.\n:::\n';
+    const serialized = serializeMarkdown(parseMarkdown(source).document);
+    expect(serialized).toBe(source);
+  });
+
   it('exports a complete HTML document without enabling raw HTML', () => {
     const html = renderHtmlDocument('# Title\n\n<script>alert(1)</script>\n', 'A <title>');
     expect(html).toContain('<!doctype html>');
