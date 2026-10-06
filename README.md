@@ -65,6 +65,7 @@ npm run typecheck       # TypeScript 类型检查
 npm run tauri:frontend  # 构建桌面前端
 npm run tauri:build     # 构建当前平台 Tauri 程序
 npm run plugin:citations
+npm run test:desktop-ui # 无头浏览器验证 Tauri 前端交互
 ```
 
 根目录的 `npm run dev` 和 `npm run build` 现在默认走 Tauri。旧 Electron

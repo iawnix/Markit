@@ -19,6 +19,7 @@
     "typecheck:legacy": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "node scripts/smoke.mjs",
+    "test:desktop-ui": "node scripts/smoke-tauri-frontend.mjs",
     "pack:legacy": "npm run build:legacy && electron-builder --dir --x64",
     "pack:win:legacy": "npm run build:legacy && electron-builder --win dir --x64",
     "pack:linux:legacy": "npm run build:legacy && electron-builder --linux dir --x64",

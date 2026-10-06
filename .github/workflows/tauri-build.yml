@@ -18,8 +18,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npx tsc -p apps/desktop/tsconfig.json --noEmit
       - run: npm run tauri:frontend
+      - run: npm run test:desktop-ui
 
   desktop:
     strategy:
