@@ -179,8 +179,12 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .secondary-command { border: 1px solid var(--border); background: transparent; color: var(--text-muted); }
 .secondary-command:hover { border-color: #7a858f; color: var(--text); }
 .search-results { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.search-actions { display: flex; gap: 6px; margin-top: 7px; }
+.search-actions .secondary-command { flex: 1; justify-content: center; margin: 0; padding: 6px 5px; font-size: 11px; }
+.search-actions .secondary-command:disabled { cursor: default; opacity: .45; }
 .search-result { width: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px; border-radius: 3px; background: transparent; color: var(--text-muted); text-align: left; }
 .search-result:hover { background: var(--surface-hover); color: var(--text); }
+.search-result.active { background: var(--surface-hover); color: var(--text); }
 .search-result strong { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .search-result small { flex: 0 0 auto; color: var(--text-faint); font-size: 10px; }
 .menu-scrim { position: fixed; inset: 0; z-index: 7; background: #11131566; cursor: default; }

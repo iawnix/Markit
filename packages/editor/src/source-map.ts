@@ -26,3 +26,11 @@ export function patchSource(source: string, from: number, to: number, replacemen
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to > source.length) throw new Error('Invalid source range.');
   return source.slice(0, from) + replacement + source.slice(to);
 }
+
+export function replaceText(source: string, query: string, replacement: string, all = false): string {
+  const needle = query.trim();
+  if (!needle) return source;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(escaped, all ? 'giu' : 'iu');
+  return source.replace(pattern, () => replacement);
+}

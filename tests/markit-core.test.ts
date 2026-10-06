@@ -6,6 +6,7 @@ import { PluginRegistry } from '../packages/plugin-sdk/src/registry';
 import { validateManifest } from '../packages/plugin-sdk/src/index';
 import { parsePluginPackage } from '../packages/plugin-sdk/src/package';
 import { strToU8, zipSync } from 'fflate';
+import { replaceText } from '../packages/editor/src/source-map';
 
 describe('Markit Markdown core', () => {
   it('extracts a stable heading outline with source offsets', () => {
@@ -75,6 +76,11 @@ describe('Markit Markdown core', () => {
     expect(html).toContain('<title>A &lt;title&gt;</title>');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
+  });
+
+  it('replaces one or all case-insensitive source matches without interpreting replacement syntax', () => {
+    expect(replaceText('Alpha alpha $1', 'alpha', '$2')).toBe('$2 alpha $1');
+    expect(replaceText('Alpha alpha', 'alpha', '$&', true)).toBe('$& $&');
   });
 
   it('normalizes plugin permissions and identifies prompts', () => {

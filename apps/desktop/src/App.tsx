@@ -7,6 +7,7 @@ import { clearRecovery, exportHtml as writeHtml, fileRevision, importImages as w
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
 import { renderHtmlDocument } from '../../../packages/markdown/src/index';
+import { patchSource, replaceText } from '../../../packages/editor/src/source-map';
 import { parsePluginPackage } from '../../../packages/plugin-sdk/src/package';
 import { requiresPrompt } from '../../../packages/plugin-sdk/src/permissions';
 import { PluginRegistry, type InstalledPlugin } from '../../../packages/plugin-sdk/src/registry';
@@ -71,6 +72,8 @@ export default function App() {
   const [workspace, setWorkspace] = useState('');
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [query, setQuery] = useState('');
+  const [replacement, setReplacement] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -315,6 +318,7 @@ export default function App() {
   }
 
   function jumpToSearch(offset: number, index: number) {
+    setSearchIndex(index);
     if (active?.mode === 'source' && editorRef.current) {
       editorRef.current.focus();
       editorRef.current.setSelection(offset);
@@ -541,6 +545,15 @@ export default function App() {
     }
     return results;
   }, [active?.id, active?.source, query]);
+  function replaceCurrent() {
+    if (!active || !query.trim()) return;
+    const result = searchResults[searchIndex] || searchResults[0];
+    updateSource(result ? patchSource(active.source, result.offset, result.offset + query.trim().length, replacement) : active.source);
+  }
+  function replaceAll() {
+    if (!active || !query.trim()) return;
+    updateSource(replaceText(active.source, query, replacement, true));
+  }
   const closeDocument = (id: string) => {
     if (activeId === id) {
       const index = documents.findIndex(item => item.id === id);
@@ -634,7 +647,7 @@ export default function App() {
         <div className="sidebar-content">
           {sidebar === 'files' && <><div className="sidebar-heading"><span>{t('files')}</span><span><button className="icon-button" title="Open folder" aria-label="Open folder" onClick={() => void chooseWorkspace()}><FolderOpen size={15} /></button><button className="icon-button" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={15} /></button></span></div><p className="workspace-path">{workspace || 'Local workspace'}</p>{entries.filter(entry => !entry.directory && /\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)).map(entry => <button key={entry.path} className={`file-row ${active?.path === entry.path ? 'active' : ''}`} onClick={() => void openPath(entry.path)}><FileText size={15} /><span>{entry.name}</span></button>)}{!entries.length && <button className="file-row active" onClick={() => void chooseDocument()}><FileText size={15} /><span>{active ? titleFor(active.path, locale) : t('emptyTitle')}</span></button>}</>}
           {sidebar === 'outline' && <><div className="sidebar-heading"><span>{t('outline')}</span><span className="count">{headings.length}</span></div>{filteredHeadings.length ? <nav className="outline-list">{filteredHeadings.map(item => <button key={item.id} style={{ paddingLeft: `${12 + item.level * 10}px` }} onClick={() => jumpToHeading(item)}>{item.text}</button>)}</nav> : <p className="empty-sidebar">{t('noOutline')}</p>}</>}
-          {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span><span className="count">{query ? searchResults.length : ''}</span></div><input className="sidebar-search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('search')} />{query && searchResults.length ? <div className="search-results">{searchResults.map((result, index) => <button className="search-result" key={`${result.offset}:${index}`} onClick={() => jumpToSearch(result.offset, index)}><strong>{result.text}</strong><small>#{index + 1}</small></button>)}</div> : query ? <p className="empty-sidebar">{t('searchNoResults')}</p> : <p className="empty-sidebar">{t('searchHint')}</p>}</>}
+          {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span><span className="count">{query ? searchResults.length : ''}</span></div><input className="sidebar-search" value={query} onChange={event => { setQuery(event.target.value); setSearchIndex(0); }} placeholder={t('search')} /><input className="sidebar-search" value={replacement} onChange={event => setReplacement(event.target.value)} placeholder={t('replacePlaceholder')} disabled={!query.trim()} /><div className="search-actions"><button className="secondary-command" onClick={replaceCurrent} disabled={!query.trim() || !searchResults.length}>{t('replaceCurrent')}</button><button className="secondary-command" onClick={replaceAll} disabled={!query.trim() || !searchResults.length}>{t('replaceAll')}</button></div>{query && searchResults.length ? <div className="search-results">{searchResults.map((result, index) => <button className={`search-result ${index === searchIndex ? 'active' : ''}`} key={`${result.offset}:${index}`} onClick={() => jumpToSearch(result.offset, index)}><strong>{result.text}</strong><small>#{index + 1}</small></button>)}</div> : query ? <p className="empty-sidebar">{t('searchNoResults')}</p> : <p className="empty-sidebar">{t('searchHint')}</p>}</>}
           {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div>{selectedPluginPanel.searchCommand && <input className="plugin-panel-search" aria-label={t('pluginSearchPlaceholder')} placeholder={t('pluginSearchPlaceholder')} onKeyDown={event => { if (event.key === 'Enter') { const command = pluginCommands.find(item => item.pluginId === selectedPluginPanel.pluginId && item.id === selectedPluginPanel.searchCommand); if (command) void runPluginCommand(command, [(event.currentTarget as HTMLInputElement).value]); } }} />}{selectedPluginPanel.content?.status && <p className="plugin-panel-status">{selectedPluginPanel.content.status}</p>}{selectedPluginPanel.content?.items?.length ? <div className="plugin-panel-items">{selectedPluginPanel.content.items.map(item => <button className="plugin-panel-item" key={item.id} onClick={() => item.command && runPanelAction(selectedPluginPanel, item.command)} disabled={!item.command}><strong>{item.title}</strong>{item.meta && <small>{item.meta}</small>}</button>)}</div> : <p className="plugin-panel-status">{t('pluginNoResults')}</p>}{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
         </div>
         <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label={t('resizeSidebar')} aria-valuemin={SIDEBAR_MIN_WIDTH} aria-valuemax={SIDEBAR_MAX_WIDTH} aria-valuenow={sidebarWidth} tabIndex={0} onPointerDown={beginSidebarResize} onPointerMove={resizeSidebar} onPointerUp={endSidebarResize} onPointerCancel={endSidebarResize} onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)} onKeyDown={event => { if (event.key === 'ArrowLeft') { event.preventDefault(); adjustSidebarWidth(-16); } if (event.key === 'ArrowRight') { event.preventDefault(); adjustSidebarWidth(16); } if (event.key === 'Home') { event.preventDefault(); setSidebarWidth(SIDEBAR_MIN_WIDTH); } if (event.key === 'End') { event.preventDefault(); setSidebarWidth(SIDEBAR_MAX_WIDTH); } }} />
