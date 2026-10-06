@@ -26,13 +26,14 @@ interface Projection { source: string; mappings: Map<string, string> }
 const imagePattern = /!\[[^\]]*\]\((?:<([^>\n]+)>|([^\s)\n]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g;
 const citationPattern = /\[(?:@[A-Z0-9]{8})(?:\s*;\s*@[A-Z0-9]{8})*\]/gu;
 
-function markInputRule(regexp: RegExp, markType: MarkType): InputRule {
+function markInputRule(regexp: RegExp, markType: MarkType | MarkType[]): InputRule {
   return new InputRule(regexp, (state, match, start, end) => {
     const boundary = match[1]?.length || 0;
     const content = match[3];
     if (!match[2] || !content) return null;
     const from = start + boundary;
-    return state.tr.replaceWith(from, end, state.schema.text(content, [markType.create()]));
+    const marks = Array.isArray(markType) ? markType : [markType];
+    return state.tr.replaceWith(from, end, state.schema.text(content, marks.map(mark => mark.create())));
   });
 }
 
@@ -243,7 +244,7 @@ function horizontalRuleInputRule(schema: typeof markdownParser['schema']): Input
   });
 }
 
-function createLiveInputRules(schema: typeof markdownParser['schema']) {
+export function createLiveInputRules(schema: typeof markdownParser['schema']) {
   const heading = schema.nodes.heading;
   const codeBlock = schema.nodes.code_block;
   const blockquote = schema.nodes.blockquote;
@@ -262,11 +263,14 @@ function createLiveInputRules(schema: typeof markdownParser['schema']) {
     wrappingInputRule(/^\s*>\s$/, blockquote),
     wrappingInputRule(/^\s*([-+*])\s$/, bulletList),
     wrappingInputRule(/^\s*(\d+)\.\s$/, orderedList, match => ({ order: Number(match[1]) })),
-    markInputRule(/(^|[^\w*])(\*\*)(?=\S)([^*]+?\S)\2(?!\*)$/, strong),
+    // Longer delimiter runs must be checked before their shorter equivalents.
+    markInputRule(/(^|[^\w*])(\*{4})(?=\S)([^*]+?\S)\2(?!\*)$/, strong),
+    markInputRule(/(^|[^\w*])(\*{3})(?=\S)([^*]+?\S)\2(?!\*)$/, [strong, em]),
+    markInputRule(/(^|[^\w*])(\*{2})(?=\S)([^*]+?\S)\2(?!\*)$/, strong),
     markInputRule(/(^|[^\w_])(__)(?=\S)([^_]+?\S)\2(?!_)$/, strong),
     markInputRule(/(^|[^\w*])(\*)(?=\S)([^*]+?\S)\2(?!\*)$/, em),
     markInputRule(/(^|[^\w_])(_)(?=\S)([^_]+?\S)\2(?!_)$/, em),
-    markInputRule(/(^|[^\w])(`)(?=\S)([^`]+?\S)\2$/, code),
+    markInputRule(/(^|[^\w])(`+)(?=\S)([^`]+?\S)\2$/, code),
     linkInputRule(link),
     markInputRule(/(^|[^\w])(~~)(?=\S)([^~]+?\S)\2$/, strike),
     markInputRule(/(^|[^\w])(==)(?=\S)([^=]+?\S)\2$/, highlight),
