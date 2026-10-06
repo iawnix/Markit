@@ -99,6 +99,29 @@ try {
   await page.locator('.pm-editor code', { hasText: 'typed code' }).waitFor();
   checks.push('live code fence and inline formatting input');
 
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('# typed heading');
+  await page.locator('.pm-editor h1', { hasText: 'typed heading' }).waitFor();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('- typed list');
+  await page.locator('.pm-editor ul li', { hasText: 'typed list' }).waitFor();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('> typed quote');
+  await page.locator('.pm-editor blockquote', { hasText: 'typed quote' }).waitFor();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('[typed link](https://example.com)');
+  await page.locator('.pm-editor a[href="https://example.com"]', { hasText: 'typed link' }).waitFor();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('~~typed strike~~');
+  await page.locator('.pm-editor s', { hasText: 'typed strike' }).waitFor();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('==typed highlight==');
+  await page.locator('.pm-editor mark', { hasText: 'typed highlight' }).waitFor();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('---');
+  await page.locator('.pm-editor hr').waitFor();
+  checks.push('live heading, list, quote, link, inline mark and horizontal rule input');
+
   if (await page.locator('.statusbar').count() !== 1) throw new Error('Expected one visible status bar.');
 
   await page.locator('.document-tab .tab-close').first().click();
