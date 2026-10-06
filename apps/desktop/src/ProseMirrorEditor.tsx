@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { baseKeymap, chainCommands, createParagraphNear, exitCode, liftEmptyBlock, newlineInCode, splitBlock, toggleMark } from 'prosemirror-commands';
@@ -9,11 +9,17 @@ import type { MarkType } from 'prosemirror-model';
 import { EditorState, Plugin } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
 import { tableEditing } from 'prosemirror-tables';
+import { Slice } from 'prosemirror-model';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
 import { markdownParser, markdownSerializer } from '../../../packages/editor/src/prosemirror';
 
-interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onChange(source: string): void }
+export interface LiveEditorHandle {
+  focus(): void;
+  insertMarkdown(markdown: string): void;
+}
+
+interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onChange(source: string): void; onImageFiles?(files: File[]): void }
 
 interface Projection { source: string; mappings: Map<string, string> }
 
@@ -217,17 +223,30 @@ function restoreImages(source: string, mappings: Map<string, string>): string {
   return restored;
 }
 
-export function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', onChange }: Props) {
+export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', onChange, onImageFiles }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const sourceRef = useRef(source);
   const changeRef = useRef(onChange);
   const citationMapRef = useRef(citationMap);
   const searchQueryRef = useRef(searchQuery);
+  const onImageFilesRef = useRef(onImageFiles);
   const projectionRef = useRef({ source: '', documentPath: null as string | null, mappings: new Map<string, string>() });
   changeRef.current = onChange;
   citationMapRef.current = citationMap;
   searchQueryRef.current = searchQuery;
+  onImageFilesRef.current = onImageFiles;
+
+  useImperativeHandle(ref, () => ({
+    focus() { view.current?.focus(); },
+    insertMarkdown(markdown) {
+      const editor = view.current;
+      if (!editor || !markdown) return;
+      const parsed = markdownParser.parse(markdown);
+      editor.dispatch(editor.state.tr.replaceSelection(new Slice(parsed.content, 0, 0)).scrollIntoView());
+      editor.focus();
+    },
+  }), []);
 
   useEffect(() => {
     if (!host.current) return;
@@ -262,6 +281,20 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
           } } }),
         ],
       }),
+      handlePaste(view, event) {
+        const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'));
+        if (!files.length || !onImageFilesRef.current) return false;
+        event.preventDefault();
+        onImageFilesRef.current(files);
+        return true;
+      },
+      handleDrop(view, event) {
+        const files = Array.from(event.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'));
+        if (!files.length || !onImageFilesRef.current) return false;
+        event.preventDefault();
+        onImageFilesRef.current(files);
+        return true;
+      },
       dispatchTransaction(transaction) {
         const next = editor.state.apply(transaction);
         editor.updateState(next);
@@ -304,4 +337,4 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
   }, [source, documentPath]);
 
   return <div ref={host} className="pm-editor" aria-label="Markdown editor" />;
-}
+});
