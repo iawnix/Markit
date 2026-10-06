@@ -74,6 +74,26 @@ jobs:
         if: matrix.platform == 'macos'
         run: npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles app,dmg
 
+      - name: Verify Linux bundle metadata
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="apps/desktop/src-tauri/target/release/bundle"
+          appimage="$(find "$output/appimage" -type f -name '*.AppImage' -print -quit)"
+          deb="$(find "$output/deb" -type f -name '*.deb' -print -quit)"
+          rpm="$(find "$output/rpm" -type f -name '*.rpm' -print -quit)"
+          test -n "$appimage" -a -n "$deb" -a -n "$rpm"
+          test -x "$appimage"
+          file "$appimage" | grep -Eiq 'appimage|squashfs|executable'
+          dpkg-deb --info "$deb" | grep -Fq 'Package: markit'
+          rpm -qip "$rpm" | grep -Eiq '^Name[[:space:]]*:[[:space:]]*markit'
+          rm -rf appimage-check
+          "$appimage" --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -f squashfs-root/usr/bin/markit
+          rm -rf squashfs-root
+
       - name: Prepare Linux release assets
         if: matrix.platform == 'linux'
         shell: bash
@@ -111,6 +131,22 @@ jobs:
           Copy-Item -LiteralPath $binary.FullName -Destination (Join-Path $portableDir 'Markit.exe')
           Compress-Archive -LiteralPath (Join-Path $portableDir 'Markit.exe') -DestinationPath "release-assets/Markit-$version-Windows-x64.zip" -Force
 
+      - name: Verify Windows release assets
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = node -p "require('./package.json').version"
+          $setup = Get-Item "release-assets/Markit-$version-Windows-x64-Setup.exe"
+          $zip = Get-Item "release-assets/Markit-$version-Windows-x64.zip"
+          if ($setup.Length -le 1MB -or $zip.Length -le 1KB) { throw 'Windows release assets are unexpectedly small.' }
+          $extract = Join-Path $env:RUNNER_TEMP 'Markit-zip-check'
+          Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $extract
+          $portable = Get-Item (Join-Path $extract 'Markit.exe')
+          if ($portable.Length -le 1MB) { throw 'Portable Windows executable is unexpectedly small.' }
+          [Diagnostics.FileVersionInfo]::GetVersionInfo($setup.FullName) | Out-String | Write-Output
+
       - name: Prepare macOS release assets
         if: matrix.platform == 'macos'
         shell: bash
@@ -121,6 +157,17 @@ jobs:
           test -n "$dmg"
           mkdir -p release-assets
           cp "$dmg" "release-assets/Markit-$version-macOS-x64.dmg"
+
+      - name: Verify macOS release asset
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          dmg="release-assets/Markit-$version-macOS-x64.dmg"
+          test -s "$dmg"
+          hdiutil imageinfo "$dmg" >/dev/null
+          hdiutil verify "$dmg"
 
       - uses: actions/upload-artifact@v4
         with:
