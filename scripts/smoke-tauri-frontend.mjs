@@ -81,6 +81,23 @@ try {
   if (!(await sourceEditor.textContent())?.includes('Searchable Markit text.')) throw new Error('Source changed during live/source mode round-trip.');
   checks.push('source/live round-trip');
 
+  await previewMode.click();
+  const liveEditor = page.locator('.pm-editor .ProseMirror');
+  await liveEditor.click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('```javascript');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('const typed = true;');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.locator('.pm-editor pre code').waitFor();
+  await page.keyboard.type('**typed bold**');
+  await page.locator('.pm-editor strong', { hasText: 'typed bold' }).waitFor();
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('`typed code`');
+  await page.locator('.pm-editor code', { hasText: 'typed code' }).waitFor();
+  checks.push('live code fence and inline formatting input');
+
   if (await page.locator('.statusbar').count() !== 1) throw new Error('Expected one visible status bar.');
 
   await page.locator('.document-tab .tab-close').first().click();
