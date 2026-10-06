@@ -363,6 +363,9 @@ fn export_png(path: String, bytes: Vec<u8>) -> Result<(), String> {
     if bytes.is_empty() || bytes.len() > MAX_EXPORT_BYTES {
         return Err("The exported PNG is empty or too large".into());
     }
+    if !bytes.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]) {
+        return Err("PNG export data has an invalid signature".into());
+    }
     let image = image::ImageReader::new(Cursor::new(&bytes))
         .with_guessed_format()
         .map_err(|error| error.to_string())?
