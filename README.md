@@ -30,6 +30,7 @@ Linux 构建使用系统 WebKitGTK。AppImage 不包含完整的 Chromium 运行
 - UTF-8、BOM、LF/CRLF 和外部文件修改检测
 - 原子保存、未保存状态和崩溃恢复
 - HTML 导出
+- 原生打印 / PDF 导出，以及即时排版 PNG 长图导出
 - 简体中文和 English 界面
 - 本地 `.markit-plugin` 插件包、权限确认和 Worker 隔离
 
@@ -77,6 +78,10 @@ Linux 发行包示例：
 ```bash
 npx tauri build --config apps/desktop/src-tauri/tauri.conf.json --bundles appimage,deb,rpm
 ```
+
+正式 Release 会同时提供 Windows、macOS 和 Linux 安装包，并上传 `SHA256SUMS.txt`。
+Linux 的 AppImage、DEB 和 RPM 使用系统 WebKitGTK 运行时；下载后可用
+`sha256sum -c SHA256SUMS.txt` 校验文件完整性。
 
 开发和发布细节见 [`resources/Development.md`](resources/Development.md)。
 
