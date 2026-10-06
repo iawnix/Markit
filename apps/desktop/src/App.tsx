@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
 import { Code2, Download, Eye, FileText, FolderOpen, Focus, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
 import { clearRecovery, exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
@@ -36,6 +36,31 @@ type Theme = 'system' | 'light' | 'dark';
 const SIDEBAR_DEFAULT_WIDTH = 300;
 const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_MAX_WIDTH = 460;
+const WINDOW_STATE_KEY = 'markit.windowState';
+const WINDOW_MIN_WIDTH = 820;
+const WINDOW_MIN_HEIGHT = 560;
+const WINDOW_MAX_DIMENSION = 10000;
+const WINDOW_MAX_POSITION = 100000;
+
+interface WindowState {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  maximized: boolean;
+}
+
+function readWindowState(): WindowState | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(WINDOW_STATE_KEY) || 'null') as Partial<WindowState> | null;
+    if (!value || ![value.width, value.height, value.x, value.y].every(Number.isFinite)) return null;
+    if (value.width! < WINDOW_MIN_WIDTH || value.height! < WINDOW_MIN_HEIGHT || value.width! > WINDOW_MAX_DIMENSION || value.height! > WINDOW_MAX_DIMENSION) return null;
+    if (Math.abs(value.x!) > WINDOW_MAX_POSITION || Math.abs(value.y!) > WINDOW_MAX_POSITION) return null;
+    return { width: Math.round(value.width!), height: Math.round(value.height!), x: Math.round(value.x!), y: Math.round(value.y!), maximized: value.maximized === true };
+  } catch {
+    return null;
+  }
+}
 
 function clampSidebarWidth(value: number) {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
@@ -277,15 +302,58 @@ export default function App() {
   }, [pendingClose]);
   useEffect(() => {
     if (!isTauriRuntime) return;
-    void getCurrentWindow().setDecorations(false).catch(() => undefined);
+    const appWindow = getCurrentWindow();
+    let restoring = true;
+    let persistTimer: number | null = null;
     let unlisten: (() => void) | undefined;
-    void getCurrentWindow().onCloseRequested(event => {
+    let unlistenResize: (() => void) | undefined;
+    let unlistenMove: (() => void) | undefined;
+    const persist = async () => {
+      if (restoring) return;
+      try {
+        const [size, position, maximized, fullscreen] = await Promise.all([appWindow.innerSize(), appWindow.outerPosition(), appWindow.isMaximized(), appWindow.isFullscreen()]);
+        if (fullscreen) return;
+        localStorage.setItem(WINDOW_STATE_KEY, JSON.stringify({ width: size.width, height: size.height, x: position.x, y: position.y, maximized } satisfies WindowState));
+      } catch {
+        // Window state persistence is best effort and must not affect editing.
+      }
+    };
+    const schedulePersist = () => {
+      if (restoring) return;
+      if (persistTimer !== null) window.clearTimeout(persistTimer);
+      persistTimer = window.setTimeout(() => { persistTimer = null; void persist(); }, 250);
+    };
+    const restore = async () => {
+      const saved = readWindowState();
+      if (saved) {
+        try {
+          if (!saved.maximized) {
+            await appWindow.setSize(new PhysicalSize(saved.width, saved.height));
+            await appWindow.setPosition(new PhysicalPosition(saved.x, saved.y));
+          }
+          if (saved.maximized) await appWindow.maximize();
+        } catch {
+          // Keep the configured default when the saved monitor is unavailable.
+        }
+      }
+      restoring = false;
+    };
+    void appWindow.setDecorations(false).catch(() => undefined);
+    void restore();
+    void appWindow.onResized(schedulePersist).then(value => { unlistenResize = value; }).catch(() => undefined);
+    void appWindow.onMoved(schedulePersist).then(value => { unlistenMove = value; }).catch(() => undefined);
+    void appWindow.onCloseRequested(event => {
       const dirty = documentsRef.current.find(document => document.dirty);
-      if (!dirty) return;
+      if (!dirty) { void persist(); return; }
       event.preventDefault();
       setPendingClose({ id: dirty.id, title: titleFor(dirty.path, locale), windowClose: true });
     }).then(value => { unlisten = value; }).catch(() => undefined);
-    return () => { unlisten?.(); };
+    return () => {
+      if (persistTimer !== null) window.clearTimeout(persistTimer);
+      unlisten?.();
+      unlistenResize?.();
+      unlistenMove?.();
+    };
   }, [locale]);
   useEffect(() => { documentsRef.current = documents; }, [documents]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
