@@ -37,6 +37,13 @@ describe('Markit Markdown core', () => {
     expect(serializeMarkdown(parseMarkdown(source).document)).toContain('~~removed~~');
   });
 
+  it('preserves front matter, comments, and special fenced blocks as raw nodes', () => {
+    const source = '---\ntitle: Demo\n---\n\n<!-- generated -->\n\n```mermaid\nflowchart LR\nA-->B\n```\n';
+    const document = parseMarkdown(source).document;
+    expect(document.content.content.map(node => node.type.name)).toEqual(['raw_markdown', 'raw_markdown', 'raw_markdown']);
+    expect(serializeMarkdown(document)).toBe(source);
+  });
+
   it('exports a complete HTML document without enabling raw HTML', () => {
     const html = renderHtmlDocument('# Title\n\n<script>alert(1)</script>\n', 'A <title>');
     expect(html).toContain('<!doctype html>');
