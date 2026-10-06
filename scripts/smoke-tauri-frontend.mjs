@@ -82,6 +82,17 @@ try {
   checks.push('source/live round-trip');
 
   if (await page.locator('.statusbar').count() !== 1) throw new Error('Expected one visible status bar.');
+
+  await page.locator('.document-tab .tab-close').first().click();
+  await page.locator('[data-testid="close-confirm"]').waitFor();
+  if (await page.locator('.document-tab').count() !== 1) throw new Error('Dirty document closed before confirmation.');
+  await page.getByRole('button', { name: '取消', exact: true }).last().click();
+  if (await page.locator('[data-testid="close-confirm"]').count() !== 0) throw new Error('Close confirmation did not close after cancellation.');
+  await page.locator('.document-tab .tab-close').first().click();
+  await page.getByRole('button', { name: '丢弃修改', exact: true }).click();
+  await page.locator('.empty-state').waitFor();
+  checks.push('dirty document close confirmation');
+
   if (errors.length) throw new Error(`Frontend console errors:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'passed', checks }));
 } catch (error) {

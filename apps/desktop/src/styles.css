@@ -200,6 +200,12 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 22px; background: #11131599; }
 .settings-modal { width: 560px; max-width: 100%; max-height: min(720px, calc(100vh - 44px)); overflow: auto; border: 1px solid var(--border); border-radius: 5px; background: var(--modal-background); box-shadow: 0 22px 70px #11131580; }
 .link-editor-modal { width: 440px; max-width: 100%; border: 1px solid var(--border); border-radius: 5px; background: var(--modal-background); box-shadow: 0 22px 70px #11131580; }
+.close-confirm-modal { width: 460px; max-width: 100%; border: 1px solid var(--border); border-radius: 5px; background: var(--modal-background); box-shadow: 0 22px 70px #11131580; }
+.close-confirm-modal header { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-bottom: 1px solid var(--rule); }
+.close-confirm-modal h2 { margin: 0; color: var(--heading); font-size: 16px; font-weight: 500; }
+.close-confirm-body { margin: 0; padding: 22px 18px 12px; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.close-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 18px 18px; }
+.close-confirm-actions button { margin: 0; }
 .link-editor-modal header { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-bottom: 1px solid var(--rule); }
 .link-editor-modal h2 { margin: 0; color: var(--heading); font-size: 16px; font-weight: 500; }
 .link-editor-field { display: flex; flex-direction: column; gap: 8px; padding: 20px 18px 12px; color: var(--text-muted); font-size: 13px; }

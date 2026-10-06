@@ -76,6 +76,7 @@ export default function App() {
   const [replacement, setReplacement] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [pendingClose, setPendingClose] = useState<{ id: string; title: string; windowClose?: boolean } | null>(null);
   const [linkEditor, setLinkEditor] = useState<{ href: string } | null>(null);
   const [linkEditorValue, setLinkEditorValue] = useState('');
   const linkEditorOpenRef = useRef(false);
@@ -211,7 +212,7 @@ export default function App() {
       setRecoveryLoaded(true);
     }).catch(() => setRecoveryLoaded(true));
     return () => { cancelled = true; };
-  }, []);
+  }, [locale]);
   useEffect(() => {
     if (!recoveryLoaded) return;
     const recoverable = documents.filter(document => document.dirty || (!document.path && document.source !== document.savedSource));
@@ -256,6 +257,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (pendingClose) { setPendingClose(null); return; }
         if (linkEditorOpenRef.current) { resolveLinkEditor(null); return; }
         setMenuOpen(false);
         return;
@@ -272,11 +274,19 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [pendingClose]);
   useEffect(() => {
     if (!isTauriRuntime) return;
     void getCurrentWindow().setDecorations(false).catch(() => undefined);
-  }, []);
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow().onCloseRequested(event => {
+      const dirty = documentsRef.current.find(document => document.dirty);
+      if (!dirty) return;
+      event.preventDefault();
+      setPendingClose({ id: dirty.id, title: titleFor(dirty.path, locale), windowClose: true });
+    }).then(value => { unlisten = value; }).catch(() => undefined);
+    return () => { unlisten?.(); };
+  }, [locale]);
   useEffect(() => { documentsRef.current = documents; }, [documents]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => {
@@ -341,16 +351,27 @@ export default function App() {
 
   async function save() {
     if (!active) return;
+    await saveDocumentById(active.id);
+  }
+
+  async function saveDocumentById(id: string): Promise<boolean> {
+    const snapshot = documentsRef.current.find(item => item.id === id);
+    if (!snapshot) return false;
     try {
-      let path = active.path;
+      let path = snapshot.path;
       if (!path) {
         const selected = await saveFile({ defaultPath: 'Untitled.md', filters: [{ name: 'Markdown', extensions: ['md'] }] });
-        if (typeof selected !== 'string') return;
+        if (typeof selected !== 'string') return false;
         path = selected;
       }
-      const revision = await saveDocument(path, active.source, active.path ? active.revision : null, active.bom, active.lineEnding);
-      setDocuments(current => current.map(item => item.id === active.id ? { ...item, path, title: titleFor(path, locale), savedSource: item.source, dirty: false, revision, externalChange: false } : item));
-    } catch (error) { reportError(error); }
+      const revision = await saveDocument(path, snapshot.source, snapshot.path ? snapshot.revision : null, snapshot.bom, snapshot.lineEnding);
+      const changedDuringSave = documentsRef.current.find(item => item.id === id)?.source !== snapshot.source;
+      setDocuments(current => current.map(item => item.id === id ? { ...item, path, title: titleFor(path, locale), savedSource: snapshot.source, dirty: item.source !== snapshot.source, revision, externalChange: false } : item));
+      return !changedDuringSave;
+    } catch (error) {
+      reportError(error);
+      return false;
+    }
   }
 
   saveRef.current = save;
@@ -631,7 +652,7 @@ export default function App() {
     if (!active || !query.trim()) return;
     updateSource(replaceText(active.source, query, replacement, true));
   }
-  const closeDocument = (id: string) => {
+  const finishCloseDocument = (id: string) => {
     if (activeId === id) {
       const index = documents.findIndex(item => item.id === id);
       const next = documents[index + 1] || documents[index - 1] || null;
@@ -639,6 +660,41 @@ export default function App() {
     }
     setDocuments(current => current.filter(item => item.id !== id));
   };
+  const requestCloseDocument = (id: string) => {
+    const document = documents.find(item => item.id === id);
+    if (!document) return;
+    if (document.dirty) {
+      setPendingClose({ id, title: titleFor(document.path, locale) });
+      return;
+    }
+    finishCloseDocument(id);
+  };
+  async function saveAndCloseDocument() {
+    if (!pendingClose) return;
+    if (pendingClose.windowClose) {
+      for (const document of documentsRef.current.filter(item => item.dirty)) {
+        if (!await saveDocumentById(document.id)) return;
+      }
+      setPendingClose(null);
+      if (isTauriRuntime) void getCurrentWindow().destroy().catch(() => undefined);
+      return;
+    }
+    const id = pendingClose.id;
+    if (!await saveDocumentById(id)) return;
+    setPendingClose(null);
+    finishCloseDocument(id);
+  }
+  function discardAndCloseDocument() {
+    if (!pendingClose) return;
+    if (pendingClose.windowClose) {
+      setPendingClose(null);
+      if (isTauriRuntime) void getCurrentWindow().destroy().catch(() => undefined);
+      return;
+    }
+    const id = pendingClose.id;
+    setPendingClose(null);
+    finishCloseDocument(id);
+  }
   const dragWindow = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0 || !isTauriRuntime) return;
     void getCurrentWindow().startDragging().catch(() => undefined);
@@ -730,7 +786,7 @@ export default function App() {
         <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label={t('resizeSidebar')} aria-valuemin={SIDEBAR_MIN_WIDTH} aria-valuemax={SIDEBAR_MAX_WIDTH} aria-valuenow={sidebarWidth} tabIndex={0} onPointerDown={beginSidebarResize} onPointerMove={resizeSidebar} onPointerUp={endSidebarResize} onPointerCancel={endSidebarResize} onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)} onKeyDown={event => { if (event.key === 'ArrowLeft') { event.preventDefault(); adjustSidebarWidth(-16); } if (event.key === 'ArrowRight') { event.preventDefault(); adjustSidebarWidth(16); } if (event.key === 'Home') { event.preventDefault(); setSidebarWidth(SIDEBAR_MIN_WIDTH); } if (event.key === 'End') { event.preventDefault(); setSidebarWidth(SIDEBAR_MAX_WIDTH); } }} />
       </aside>
       <main className="main-panel">
-        <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); closeDocument(document.id); }}><X size={13} /></span></button>)}</div>
+      <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); requestCloseDocument(document.id); }}><X size={13} /></span></button>)}</div>
         {active ? <>
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
@@ -740,6 +796,7 @@ export default function App() {
       </main>
     </div>
     {showSettings && <div className="modal-backdrop" onClick={() => setShowSettings(false)}><section className="settings-modal" onClick={event => event.stopPropagation()}><header><h2>{t('settings')}</h2><button className="icon-button" title="Close" aria-label="Close" onClick={() => setShowSettings(false)}><X size={18} /></button></header><div className="settings-row"><span>{t('language')}</span><button className="secondary-command" onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}>{locale === 'zh-CN' ? t('chinese') : t('english')}</button></div><div className="settings-row"><span>{t('theme')}</span><select className="settings-select" value={theme} onChange={event => setTheme(event.target.value as Theme)}><option value="system">{t('themeSystem')}</option><option value="light">{t('themeLight')}</option><option value="dark">{t('themeDark')}</option></select></div><div className="settings-section editor-settings"><div className="settings-section-heading"><strong>{t('editorAppearance')}</strong></div><label className="settings-control"><span>{t('editorFont')}</span><select className="settings-select" value={editorFont} onChange={event => setEditorFont(event.target.value as EditorFont)}><option value="system">{t('fontSystem')}</option><option value="noto">{t('fontNoto')}</option><option value="sarasa">{t('fontSarasa')}</option><option value="jetbrains">{t('fontJetBrains')}</option></select></label><label className="settings-control"><span>{t('editorFontSize')}</span><span className="settings-range"><input type="range" min="12" max="24" step="1" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} /><output>{editorFontSize}px</output></span></label></div><div className="settings-section"><div className="settings-section-heading"><strong>{t('plugins')}</strong><button className="secondary-command" onClick={() => void choosePlugin()}><Upload size={14} />{t('installPlugin')}</button><input ref={pluginInputRef} hidden type="file" accept=".markit-plugin" onChange={event => { const file = event.target.files?.[0]; if (file) void file.arrayBuffer().then(bytes => installPlugin(new Uint8Array(bytes))); event.currentTarget.value = ''; }} /></div>{pluginError && <p className="plugin-error">{t('pluginInstallError')}: {pluginError}</p>}{plugins.length ? <div className="plugin-list">{plugins.map(plugin => <article className="plugin-row" key={plugin.manifest.id}><div className="plugin-info"><strong>{plugin.manifest.name}</strong><span>{plugin.manifest.id} · v{plugin.manifest.version}</span><small>{t('pluginPermissions')}: {plugin.manifest.permissions.length ? plugin.manifest.permissions.join(', ') : 'none'}</small></div><div className="plugin-actions">{(plugin.integrityVerified || plugin.signaturePresent) && <span title={plugin.integrityVerified ? t('pluginIntegrity') : t('pluginUnsigned')}><ShieldCheck size={14} /></span>}<button className="icon-button" title={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} aria-label={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} onClick={() => togglePlugin(plugin)}><span className={`plugin-toggle ${plugin.enabled ? 'enabled' : ''}`} /></button><button className="icon-button" title={t('removePlugin')} aria-label={t('removePlugin')} onClick={() => removePlugin(plugin)}><Trash2 size={14} /></button></div></article>)}</div> : <p className="empty-sidebar">{t('noPlugins')}</p>}</div></section></div>}
+    {pendingClose && <div className="modal-backdrop" data-testid="close-confirm" onClick={() => setPendingClose(null)}><section className="close-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="close-unsaved-title" onClick={event => event.stopPropagation()}><header><h2 id="close-unsaved-title">{t('closeUnsavedTitle')}</h2><button className="icon-button" title={t('cancel')} aria-label={t('cancel')} onClick={() => setPendingClose(null)}><X size={18} /></button></header><p className="close-confirm-body">{pendingClose.windowClose ? t('closeWindowUnsavedBody') : t('closeUnsavedBody').replace('{title}', pendingClose.title)}</p><footer className="close-confirm-actions"><button className="secondary-command" onClick={() => discardAndCloseDocument()}>{t('discardChanges')}</button><button className="secondary-command" onClick={() => setPendingClose(null)}>{t('cancel')}</button><button className="primary-command" onClick={() => void saveAndCloseDocument()}>{t('saveAndClose')}</button></footer></section></div>}
     {linkEditor && <div className="modal-backdrop" onClick={() => resolveLinkEditor(null)}><section className="link-editor-modal" role="dialog" aria-modal="true" aria-labelledby="link-editor-title" onClick={event => event.stopPropagation()}><header><h2 id="link-editor-title">{t('linkEditorTitle')}</h2><button className="icon-button" title={t('cancel')} aria-label={t('cancel')} onClick={() => resolveLinkEditor(null)}><X size={18} /></button></header><label className="link-editor-field"><span>{t('linkURL')}</span><input autoFocus value={linkEditorValue} onChange={event => setLinkEditorValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); resolveLinkEditor(linkEditorValue); } if (event.key === 'Escape') { event.preventDefault(); resolveLinkEditor(null); } }} /></label><footer className="link-editor-actions"><button className="secondary-command" onClick={() => resolveLinkEditor(null)}>{t('cancel')}</button><button className="primary-command" onClick={() => resolveLinkEditor(linkEditorValue)}>{t('apply')}</button></footer></section></div>}
     {errorMessage && <div className="error-toast" role="alert"><div className="error-toast-content"><strong>{t('errorTitle')}</strong><span>{errorMessage}</span></div><button className="icon-button" title={t('closeError')} aria-label={t('closeError')} onClick={dismissError}><X size={16} /></button></div>}
   </div>;
