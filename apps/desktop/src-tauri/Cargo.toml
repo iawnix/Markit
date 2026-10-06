@@ -1,6 +1,6 @@
 [package]
 name = "markit"
-version = "0.4.14"
+version = "0.4.15"
 description = "A lightweight cross-platform Markdown editor"
 authors = ["Markit contributors"]
 license = "MIT"
