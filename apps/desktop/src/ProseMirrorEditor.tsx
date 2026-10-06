@@ -230,18 +230,16 @@ function tabThroughTable(state: EditorState, dispatch?: (transaction: Transactio
   return true;
 }
 
-function horizontalRuleInputRule(schema: typeof markdownParser['schema']): InputRule {
-  const horizontalRule = schema.nodes.horizontal_rule;
-  const paragraph = schema.nodes.paragraph;
-  return new InputRule(/^(?:---+|___+|\*\*\*+)$/, state => {
-    const cursor = (state.selection as TextSelection).$cursor;
-    if (!cursor || cursor.parent.type !== paragraph) return null;
-    const rule = horizontalRule.create();
-    const nextParagraph = paragraph.create();
-    const start = cursor.before();
-    const transaction = state.tr.replaceWith(start, cursor.after(), [rule, nextParagraph]);
-    return transaction.setSelection(TextSelection.near(transaction.doc.resolve(start + rule.nodeSize + 1)));
-  });
+function horizontalRuleOnEnter(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
+  const cursor = (state.selection as TextSelection).$cursor;
+  if (!cursor || cursor.parent.type !== state.schema.nodes.paragraph || cursor.parentOffset !== cursor.parent.content.size) return false;
+  if (!/^(?:---+|___+|\*\*\*+)$/.test(cursor.parent.textContent)) return false;
+  const horizontalRule = state.schema.nodes.horizontal_rule.create();
+  const nextParagraph = state.schema.nodes.paragraph.create();
+  const start = cursor.before();
+  const transaction = state.tr.replaceWith(start, cursor.after(), [horizontalRule, nextParagraph]);
+  if (dispatch) dispatch(transaction.setSelection(TextSelection.near(transaction.doc.resolve(start + horizontalRule.nodeSize + 1))).scrollIntoView());
+  return true;
 }
 
 export function createLiveInputRules(schema: typeof markdownParser['schema']) {
@@ -257,7 +255,6 @@ export function createLiveInputRules(schema: typeof markdownParser['schema']) {
   const strike = schema.marks.strike;
   const highlight = schema.marks.highlight;
   return [
-    horizontalRuleInputRule(schema),
     textblockTypeInputRule(/^(#{1,6})\s$/, heading, match => ({ level: match[1].length })),
     textblockTypeInputRule(/^```([A-Za-z0-9_-]+)?\s?$/, codeBlock, match => ({ params: match[1] || null })),
     wrappingInputRule(/^\s*>\s$/, blockquote),
@@ -347,7 +344,7 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
           tableEditing(),
           keymap({
             ...baseKeymap,
-            Enter: chainCommands(exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
+            Enter: chainCommands(horizontalRuleOnEnter, exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
             Backspace: chainCommands(undoInputRule, deleteEmptyHeading, baseKeymap.Backspace),
             Tab: tabThroughTable,
             'Shift-Tab': goToNextCell(-1),

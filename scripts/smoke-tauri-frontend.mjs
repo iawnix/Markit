@@ -118,7 +118,12 @@ try {
   await page.keyboard.type('==typed highlight==');
   await page.locator('.pm-editor mark', { hasText: 'typed highlight' }).waitFor();
   await page.keyboard.press('Control+A');
+  await page.keyboard.type('***typed combined emphasis***');
+  await page.locator('.pm-editor strong', { hasText: 'typed combined emphasis' }).waitFor();
+  await page.locator('.pm-editor em', { hasText: 'typed combined emphasis' }).waitFor();
+  await page.keyboard.press('Control+A');
   await page.keyboard.type('---');
+  await page.keyboard.press('Enter');
   await page.locator('.pm-editor hr').waitFor();
   checks.push('live heading, list, quote, link, inline mark and horizontal rule input');
 
