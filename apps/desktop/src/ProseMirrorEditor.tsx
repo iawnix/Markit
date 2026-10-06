@@ -6,7 +6,7 @@ import { InputRule, inputRules, textblockTypeInputRule, undoInputRule, wrappingI
 import { history, redo, undo } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import type { MarkType } from 'prosemirror-model';
-import { EditorState, Plugin } from 'prosemirror-state';
+import { EditorState, Plugin, TextSelection } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
 import { tableEditing } from 'prosemirror-tables';
 import { Slice } from 'prosemirror-model';
@@ -19,7 +19,7 @@ export interface LiveEditorHandle {
   insertMarkdown(markdown: string): void;
 }
 
-interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onChange(source: string): void; onImageFiles?(files: File[]): void }
+interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
 
 interface Projection { source: string; mappings: Map<string, string> }
 
@@ -292,8 +292,17 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
         const files = Array.from(event.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'));
         if (!files.length || !onImageFilesRef.current) return false;
         event.preventDefault();
-        onImageFilesRef.current(files);
+        const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+        if (position !== undefined) view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(position))));
+        onImageFilesRef.current(files, position);
         return true;
+      },
+      handleDOMEvents: {
+        dragover(_view, event) {
+          if (!event.dataTransfer?.types.includes('Files')) return false;
+          event.preventDefault();
+          return true;
+        },
       },
       dispatchTransaction(transaction) {
         const next = editor.state.apply(transaction);
