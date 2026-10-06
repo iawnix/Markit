@@ -333,9 +333,19 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
       }),
       handlePaste(view, event) {
         const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'));
-        if (!files.length || !onImageFilesRef.current) return false;
+        if (files.length && onImageFilesRef.current) {
+          event.preventDefault();
+          onImageFilesRef.current(files);
+          return true;
+        }
+        const clipboard = event.clipboardData;
+        if (!clipboard || clipboard.types.includes('text/html')) return false;
+        const text = clipboard.getData('text/plain');
+        if (!text) return false;
+        const parsed = markdownParser.parse(text);
         event.preventDefault();
-        onImageFilesRef.current(files);
+        view.dispatch(view.state.tr.replaceSelection(new Slice(parsed.content, 0, 0)).scrollIntoView());
+        view.focus();
         return true;
       },
       handleDrop(view, event) {
