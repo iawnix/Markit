@@ -616,3 +616,120 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running Markit");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temporary_directory(label: &str) -> PathBuf {
+        let directory = std::env::temp_dir().join(format!("markit-{label}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).expect("create temporary directory");
+        directory
+    }
+
+    #[test]
+    fn decodes_utf8_bom_and_normalizes_line_endings() {
+        let bytes = [0xef, 0xbb, 0xbf, b'a', b'\r', b'\n', b'b', b'\r', b'c'];
+        assert_eq!(decode_source(&bytes).unwrap(), ("a\nb\nc".into(), true));
+        assert_eq!(detect_line_ending(b"a\r\nb\r\nc\n"), "CRLF");
+        assert_eq!(detect_line_ending(b"a\nb\nc\r"), "LF");
+        assert!(decode_source(&[0xff, 0xfe]).is_err());
+    }
+
+    #[test]
+    fn validates_absolute_paths_and_rejects_control_characters() {
+        let absolute = std::env::temp_dir().join("document.md");
+        assert_eq!(
+            validate_local_path(absolute.to_str().unwrap()).unwrap(),
+            absolute
+        );
+        assert!(validate_local_path("document.md").is_err());
+        assert!(validate_local_path("/tmp/document\n.md").is_err());
+        assert!(validate_local_path("").is_err());
+    }
+
+    #[test]
+    fn saves_with_bom_and_crlf_and_detects_external_changes() {
+        let directory = temporary_directory("save");
+        let path = directory.join("note.md");
+        let first = save_document(
+            path.to_string_lossy().into_owned(),
+            "# Title\n\nText\n".into(),
+            None,
+            true,
+            "CRLF".into(),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            b"\xef\xbb\xbf# Title\r\n\r\nText\r\n"
+        );
+        let snapshot = read_document(path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(snapshot.source, "# Title\n\nText\n");
+        assert_eq!(snapshot.line_ending, "CRLF");
+        assert_eq!(snapshot.revision.as_ref().unwrap().hash, first.hash);
+        fs::write(&path, b"changed outside Markit\n").unwrap();
+        let result = save_document(
+            path.to_string_lossy().into_owned(),
+            "new\n".into(),
+            snapshot.revision,
+            false,
+            "LF".into(),
+        );
+        assert!(result.unwrap_err().contains("changed on disk"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn outline_offsets_count_utf16_code_units() {
+        let source = "# 中文\n\n## 第二节\n";
+        let entries = extract_outline(source.into());
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].offset, 0);
+        assert_eq!(entries[1].offset, "# 中文\n\n".encode_utf16().count());
+        assert_eq!(entries[1].text, "第二节");
+    }
+
+    #[test]
+    fn blocks_asset_escape_and_invalid_exports() {
+        let directory = temporary_directory("paths");
+        let document = directory.join("note.md");
+        fs::write(&document, b"# note").unwrap();
+        assert!(asset_directory(&document, "../outside").is_err());
+        assert!(asset_directory(&document, "/tmp/outside").is_err());
+        assert!(export_html(
+            directory.join("note.txt").to_string_lossy().into_owned(),
+            "<p>x</p>".into()
+        )
+        .is_err());
+        export_html(
+            directory.join("out.html").to_string_lossy().into_owned(),
+            "<p>x</p>".into(),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(directory.join("out.html")).unwrap(),
+            "<p>x</p>"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn rejects_invalid_images_before_import() {
+        assert!(validate_image(Vec::new()).is_err());
+        assert!(validate_image(vec![1, 2, 3, 4]).is_err());
+        let directory = temporary_directory("images");
+        let document = directory.join("note.md");
+        fs::write(&document, b"# note").unwrap();
+        let result = import_images(
+            document.to_string_lossy().into_owned(),
+            "../escape".into(),
+            vec![ImageInput {
+                name: "x.png".into(),
+                bytes: vec![1, 2, 3],
+            }],
+        );
+        assert!(result.is_err());
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
