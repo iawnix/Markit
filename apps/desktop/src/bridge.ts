@@ -59,6 +59,20 @@ export async function exportHtml(path: string, html: string): Promise<void> {
   await invoke('export_html', { path, html });
 }
 
+export async function exportPng(path: string, bytes: Uint8Array): Promise<void> {
+  if (!isTauriRuntime) {
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const url = URL.createObjectURL(new Blob([buffer], { type: 'image/png' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = path.split(/[\\/]/).at(-1) || 'Markit-export.png';
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  await invoke('export_png', { path, bytes: [...bytes] });
+}
+
 export async function registerAsset(documentPath: string, relativePath: string): Promise<string> {
   if (!isTauriRuntime) return relativePath;
   return invoke<string>('register_asset', { documentPath, relativePath });

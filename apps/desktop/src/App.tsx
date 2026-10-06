@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
-import { Code2, Download, Eye, FileText, FolderOpen, Focus, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Printer, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
+import { Code2, Download, Eye, FileText, FolderOpen, Focus, ImageDown, ImagePlus, Languages, Menu, Minus, PanelLeft, Play, Plus, Printer, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
 import { getCurrentWindow, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
-import { clearRecovery, exportHtml as writeHtml, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
+import { clearRecovery, exportHtml as writeHtml, exportPng as writePng, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
 import { renderHtmlDocument } from '../../../packages/markdown/src/index';
@@ -127,6 +127,7 @@ export default function App() {
   const [pluginError, setPluginError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [printRestoreMode, setPrintRestoreMode] = useState<'source' | 'live' | null>(null);
+  const [pngExporting, setPngExporting] = useState(false);
   const errorTimerRef = useRef<number | null>(null);
   const [pluginCommands, setPluginCommands] = useState<PluginCommandContribution[]>([]);
   const [pluginPanels, setPluginPanels] = useState<PluginPanelContribution[]>([]);
@@ -478,6 +479,37 @@ export default function App() {
       const selected = await saveFile({ defaultPath: defaultName, filters: [{ name: 'HTML', extensions: ['html', 'htm'] }] });
       if (typeof selected === 'string') await writeHtml(selected, html);
     } catch (error) { reportError(error); }
+  }
+
+  async function exportPngDocument() {
+    if (!active || pngExporting || printRestoreMode) return;
+    const defaultName = `${titleFor(active.path, locale).replace(/\.(md|markdown|mdown|mkd)$/i, '') || 'Markit-export'}.png`;
+    const documentId = active.id;
+    const originalMode = active.mode;
+    try {
+      const selected = await saveFile({ defaultPath: defaultName, filters: [{ name: 'PNG image', extensions: ['png'] }] });
+      if (typeof selected !== 'string') return;
+      setPngExporting(true);
+      if (originalMode !== 'live') setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item));
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const element = document.querySelector<HTMLElement>('.live-editor-column .pm-editor');
+      if (!element) throw new Error('The live document view is not ready for PNG export.');
+      const width = Math.ceil(element.scrollWidth);
+      const height = Math.ceil(element.scrollHeight);
+      const maxPixels = 24_000_000;
+      const naturalPixels = width * height;
+      if (!width || !height || naturalPixels > maxPixels * 4) throw new Error('This document is too large to export as one PNG image.');
+      const pixelRatio = Math.min(2, Math.max(0.5, Math.sqrt(maxPixels / Math.max(1, naturalPixels))));
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(element, { backgroundColor: '#ffffff', cacheBust: true, pixelRatio });
+      const bytes = new Uint8Array(await (await fetch(dataUrl)).arrayBuffer());
+      await writePng(selected, bytes);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setDocuments(items => items.map(item => item.id === documentId ? { ...item, mode: originalMode } : item));
+      setPngExporting(false);
+    }
   }
 
   function printDocument() {
@@ -852,6 +884,7 @@ export default function App() {
           <button onClick={() => { void chooseDocument(); setMenuOpen(false); }}><FolderOpen size={16} />{t('open')}</button>
           <button disabled={!active?.dirty} onClick={() => { void save(); setMenuOpen(false); }}><Save size={16} />{t('save')}</button>
           <button onClick={() => { void exportDocument(); setMenuOpen(false); }}><Download size={16} />{t('exportHtml')}</button>
+          <button disabled={pngExporting} onClick={() => { void exportPngDocument(); setMenuOpen(false); }}><ImageDown size={16} />{t('exportPng')}</button>
           <button onClick={() => { printDocument(); setMenuOpen(false); }}><Printer size={16} />{t('printPdf')}</button>
           <button onClick={() => { imageInputRef.current?.click(); setMenuOpen(false); }}><ImagePlus size={16} />{t('image')}</button>
           <div className="command-menu-rule" />

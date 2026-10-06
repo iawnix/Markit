@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     fs,
-    io::Write,
+    io::{Cursor, Write},
     path::{Component, Path, PathBuf},
     sync::{Arc, RwLock},
     time::UNIX_EPOCH,
@@ -349,6 +349,36 @@ fn export_html(path: String, html: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn export_png(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    let path = validate_local_path(&path)?;
+    if path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        != "png"
+    {
+        return Err("PNG exports must use a .png filename".into());
+    }
+    if bytes.is_empty() || bytes.len() > MAX_EXPORT_BYTES {
+        return Err("The exported PNG is empty or too large".into());
+    }
+    let image = image::ImageReader::new(Cursor::new(&bytes))
+        .with_guessed_format()
+        .map_err(|error| error.to_string())?
+        .decode()
+        .map_err(|error| format!("Invalid PNG export: {error}"))?;
+    let pixels = u64::from(image.width()) * u64::from(image.height());
+    if pixels > MAX_IMAGE_PIXELS {
+        return Err("The exported PNG exceeds the pixel limit".into());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    write_atomic(&path, &bytes)
+}
+
+#[tauri::command]
 fn register_asset(
     document_path: String,
     relative_path: String,
@@ -602,6 +632,7 @@ pub fn run() {
             write_recovery,
             clear_recovery,
             export_html,
+            export_png,
             register_asset,
             list_directory,
             extract_outline,
@@ -711,6 +742,21 @@ mod tests {
             fs::read_to_string(directory.join("out.html")).unwrap(),
             "<p>x</p>"
         );
+        let mut png = Vec::new();
+        image::DynamicImage::new_rgba8(2, 2)
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        export_png(
+            directory.join("out.png").to_string_lossy().into_owned(),
+            png.clone(),
+        )
+        .unwrap();
+        assert_eq!(fs::read(directory.join("out.png")).unwrap(), png);
+        assert!(export_png(
+            directory.join("out.jpg").to_string_lossy().into_owned(),
+            png
+        )
+        .is_err());
         fs::remove_dir_all(directory).unwrap();
     }
 
