@@ -65,12 +65,12 @@ npm run typecheck       # TypeScript 类型检查
 npm run tauri:frontend  # 构建桌面前端
 npm run tauri:build     # 构建当前平台 Tauri 程序
 npm run plugin:citations
-npm run test:desktop-ui # 无头浏览器验证 Tauri 前端交互
+npm run test:e2e        # 无头浏览器验证 Tauri 前端交互
 ```
 
 根目录的 `npm run dev` 和 `npm run build` 现在默认走 Tauri。旧 Electron
-验证链仍暂时保留，可通过 `npm run dev:legacy`、`npm run build:legacy` 和
-带有 `:legacy` 后缀的打包命令运行；这些命令会在旧代码迁移完成后移除。
+验证链仍暂时保留，可通过 `npm run dev:legacy`、`npm run build:legacy`、
+`npm run test:e2e:legacy` 和 `npm run test:ui:legacy` 运行；这些命令会在旧代码迁移完成后移除。
 
 Linux 发行包示例：
 

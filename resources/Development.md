@@ -41,6 +41,7 @@ npm run tauri:dev
 ```bash
 npm run typecheck
 npm run tauri:frontend
+npm run test:e2e
 npm run plugin:citations
 git diff --check
 ```
