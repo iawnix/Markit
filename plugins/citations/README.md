@@ -15,6 +15,12 @@ fixed request, timeout and response-size limits.
 The package provides a References panel, Zotero connection check, citation
 insertion from the first available local item, bibliography marker insertion,
 and bibliography refresh for citation keys in the current Markdown document.
-Bibliography ordering and formatting use the bundled citeproc-js engine and
-the panel displays its required Frank Bennett attribution. Cached reference
-search is the next migration step.
+Bibliography ordering and formatting use the bundled citeproc-js engine. Search
+results are cached per query for five minutes through the host settings API,
+and resolved citation keys are sent to the host so the live editor can display
+numbered inline citations without changing the Markdown source. The panel
+displays the required Frank Bennett attribution.
+
+Remaining limitations are deliberate: the plugin currently queries Zotero's
+local HTTP API, supports numeric citations only, and does not provide an
+online bibliography service or a plugin marketplace.
