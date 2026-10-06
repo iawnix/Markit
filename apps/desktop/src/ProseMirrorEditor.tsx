@@ -19,7 +19,7 @@ export interface LiveEditorHandle {
   insertMarkdown(markdown: string): void;
 }
 
-interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
+interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; linkPrompt?: string; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
 
 interface Projection { source: string; mappings: Map<string, string> }
 
@@ -34,6 +34,36 @@ function markInputRule(regexp: RegExp, markType: MarkType): InputRule {
     const from = start + boundary;
     return state.tr.replaceWith(from, end, state.schema.text(content, [markType.create()]));
   });
+}
+
+function linkInputRule(linkType: MarkType): InputRule {
+  return new InputRule(/(^|[^\w])\[([^\]\n]+)\]\(([^\s)]+)\)$/, (state, match, start, end) => {
+    const boundary = match[1]?.length || 0;
+    const content = match[2];
+    const href = match[3];
+    if (!content || !href) return null;
+    const from = start + boundary;
+    return state.tr.replaceWith(from, end, state.schema.text(content, [linkType.create({ href, title: null })]));
+  });
+}
+
+function editLink(state: EditorState, dispatch: ((transaction: Transaction) => void) | undefined, promptText: string): boolean {
+  const { from, to } = state.selection;
+  if (from === to) return false;
+  const link = state.schema.marks.link;
+  let current = '';
+  state.doc.nodesBetween(from, to, node => {
+    const mark = node.marks.find(item => item.type === link);
+    if (mark && typeof mark.attrs.href === 'string') current = mark.attrs.href;
+  });
+  const href = window.prompt(promptText, current || 'https://');
+  if (href === null) return true;
+  if (dispatch) {
+    const transaction = state.tr.removeMark(from, to, link);
+    if (href.trim()) transaction.addMark(from, to, link.create({ href: href.trim(), title: null }));
+    dispatch(transaction.scrollIntoView());
+  }
+  return true;
 }
 
 function citationDecorations(state: EditorState, citationMap: Record<string, number>): DecorationSet {
@@ -186,6 +216,7 @@ function createLiveInputRules(schema: typeof markdownParser['schema']) {
   const strong = schema.marks.strong;
   const em = schema.marks.em;
   const code = schema.marks.code;
+  const link = schema.marks.link;
   const strike = schema.marks.strike;
   const highlight = schema.marks.highlight;
   return [
@@ -199,6 +230,7 @@ function createLiveInputRules(schema: typeof markdownParser['schema']) {
     markInputRule(/(^|[^\w])(\*)(?=\S)([^*_]+?\S)\2$/, em),
     markInputRule(/(^|[^\w])(_)(?=\S)([^*_]+?\S)\2$/, em),
     markInputRule(/(^|[^\w])(`)(?=\S)([^`]+?\S)\2$/, code),
+    linkInputRule(link),
     markInputRule(/(^|[^\w])(~~)(?=\S)([^~]+?\S)\2$/, strike),
     markInputRule(/(^|[^\w])(==)(?=\S)([^=]+?\S)\2$/, highlight),
   ];
@@ -236,7 +268,7 @@ function restoreImages(source: string, mappings: Map<string, string>): string {
   return restored;
 }
 
-export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', onChange, onImageFiles }, ref) {
+export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', linkPrompt = 'Link URL', onChange, onImageFiles }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const sourceRef = useRef(source);
@@ -244,11 +276,13 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
   const citationMapRef = useRef(citationMap);
   const searchQueryRef = useRef(searchQuery);
   const onImageFilesRef = useRef(onImageFiles);
+  const linkPromptRef = useRef(linkPrompt);
   const projectionRef = useRef({ source: '', documentPath: null as string | null, mappings: new Map<string, string>() });
   changeRef.current = onChange;
   citationMapRef.current = citationMap;
   searchQueryRef.current = searchQuery;
   onImageFilesRef.current = onImageFiles;
+  linkPromptRef.current = linkPrompt;
 
   useImperativeHandle(ref, () => ({
     focus() { view.current?.focus(); },
@@ -279,6 +313,7 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
             'Mod-b': toggleMark(markdownParser.schema.marks.strong),
             'Mod-i': toggleMark(markdownParser.schema.marks.em),
             'Mod-Shift-x': toggleMark(markdownParser.schema.marks.strike),
+            'Mod-k': (state, dispatch) => editLink(state, dispatch, linkPromptRef.current),
             'Mod-z': undo,
             'Mod-y': redo,
             'Mod-Shift-z': redo,
