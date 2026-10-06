@@ -44,6 +44,21 @@ describe('Markit Markdown core', () => {
     expect(serializeMarkdown(document)).toBe(source);
   });
 
+  it('round-trips footnote references and renders the footnote section', () => {
+    const source = 'A note[^source].\n\n[^source]: Supporting *detail*.\n';
+    const serialized = serializeMarkdown(parseMarkdown(source).document);
+    expect(serialized).toContain('A note[^source].');
+    expect(serialized).toContain('[^source]: Supporting *detail*.');
+    const html = renderHtmlDocument(source, 'Footnotes');
+    expect(html).toContain('class="footnote-ref"');
+    expect(html).toContain('Supporting <em>detail</em>.');
+  });
+
+  it('round-trips inline footnotes without converting them to empty references', () => {
+    const source = 'Inline note^[Read this later].';
+    expect(serializeMarkdown(parseMarkdown(source).document)).toContain(source);
+  });
+
   it('exports a complete HTML document without enabling raw HTML', () => {
     const html = renderHtmlDocument('# Title\n\n<script>alert(1)</script>\n', 'A <title>');
     expect(html).toContain('<!doctype html>');

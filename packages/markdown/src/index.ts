@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it';
+import footnote from 'markdown-it-footnote';
 
 export interface MarkdownHeading {
   id: string;
@@ -8,6 +9,7 @@ export interface MarkdownHeading {
 }
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: false });
+markdown.use(footnote);
 const citationPattern = /^\[(?:@[A-Z0-9]{8})(?:\s*;\s*@[A-Z0-9]{8})*\]/u;
 
 markdown.inline.ruler.before('link', 'markit_citation', (state, silent) => {
@@ -73,6 +75,9 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 9px; border: 1px solid #dce4dd; text-align: left; }
 th { background: #f3f6f3; }
 a { color: #2c7250; }
+.footnotes { margin-top: 42px; padding-top: 16px; border-top: 1px solid #dce4dd; font-size: .9em; }
+.footnote-ref { font-size: .78em; }
+.footnote-backref { margin-left: 5px; }
 .md-citation-inline { padding: 1px 4px; border-radius: 3px; background: #eaf1ec; color: #2d6a52; font-size: .86em; }
 </style>
 </head>

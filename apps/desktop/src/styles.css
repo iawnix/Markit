@@ -128,6 +128,11 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .pm-editor .md-math-inline { display: inline-block; color: var(--heading); font-size: 1em; line-height: 1; vertical-align: -.08em; }
 .pm-editor .md-math-display { display: block; overflow-x: auto; padding: 8px 0; color: var(--heading); text-align: center; }
 .pm-editor .md-search-hit { border-radius: 2px; background: #9d8140; color: #fff; box-shadow: 0 0 0 1px #c5a95c66; }
+.pm-editor .md-footnotes { margin-top: 42px; padding-top: 16px; border-top: 1px solid var(--border); font-size: .86em; color: var(--text-muted); }
+.pm-editor .md-footnote-item { margin: 7px 0; }
+.pm-editor .md-footnote-ref { padding: 0 2px; font-size: .72em; vertical-align: super; }
+.pm-editor .md-footnote-ref a, .pm-editor .md-footnote-backref { color: var(--accent); text-decoration: none; }
+.pm-editor .md-footnote-backref { margin-left: 5px; }
 .pm-editor pre { overflow: auto; margin: 18px 0; padding: 13px 15px; border: 1px solid var(--border); border-radius: 3px; background: var(--code-background); color: var(--code-text); font: 13px/1.6 var(--editor-font-family); white-space: pre-wrap; }
 .pm-editor .md-raw-block { max-height: 260px; border-style: dashed; color: var(--text-muted); white-space: pre-wrap; }
 .pm-editor code { padding: 2px 4px; border-radius: 3px; background: var(--tab-active); color: var(--code-text); font: .88em var(--editor-font-family); }

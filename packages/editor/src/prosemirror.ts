@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
-import type { StateBlock } from 'markdown-it';
+import type { StateBlock, Token } from 'markdown-it';
+import footnote from 'markdown-it-footnote';
 import { defaultMarkdownParser, defaultMarkdownSerializer, MarkdownParser, MarkdownSerializer } from 'prosemirror-markdown';
 import { addListNodes } from 'prosemirror-schema-list';
 import { schema as basicSchema } from 'prosemirror-schema-basic';
@@ -7,7 +8,7 @@ import { tableNodes } from 'prosemirror-tables';
 import type { Attrs, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import { Schema } from 'prosemirror-model';
 
-type MarkdownToken = { attrGet(name: string): string | null };
+type MarkdownToken = { attrGet(name: string): string | null; content?: string; meta?: unknown };
 type MarkdownParseState = { openNode(type: NodeType, attrs: Attrs | null): void; closeNode(): ProseMirrorNode | null };
 type MarkdownParserHandler = (state: MarkdownParseState, token?: MarkdownToken) => void;
 
@@ -79,6 +80,26 @@ export const markitSchema = new Schema({
     selectable: true,
     attrs: { source: { default: '' } },
     toDOM: node => ['pre', { class: 'md-raw-block', contenteditable: 'false' }, node.attrs.source],
+  }).addToEnd('footnote_block', {
+    group: 'block',
+    content: 'footnote_item+',
+    toDOM: () => ['section', { class: 'md-footnotes' }, 0],
+  }).addToEnd('footnote_item', {
+    content: 'block+',
+    attrs: { label: { default: '' }, id: { default: 0 } },
+    toDOM: node => ['div', { class: 'md-footnote-item', 'data-footnote': node.attrs.label }, 0],
+  }).addToEnd('footnote_reference', {
+    inline: true,
+    group: 'inline',
+    atom: true,
+    attrs: { label: { default: '' }, content: { default: '' }, id: { default: 0 }, subId: { default: 0 } },
+    toDOM: node => ['sup', { class: 'md-footnote-ref' }, ['a', { href: `#fn-${node.attrs.label}`, 'data-footnote-ref': node.attrs.label }, `[${node.attrs.id + 1}]`]],
+  }).addToEnd('footnote_anchor', {
+    inline: true,
+    group: 'inline',
+    atom: true,
+    attrs: { label: { default: '' }, id: { default: 0 }, subId: { default: 0 } },
+    toDOM: node => ['a', { class: 'md-footnote-backref', href: `#fnref-${node.attrs.label}`, 'aria-label': 'Back to text' }, '↩'],
   }),
   marks: basicSchema.spec.marks.addToEnd('strike', {
     parseDOM: [{ tag: 's' }, { tag: 'del' }, { style: 'text-decoration=line-through' }],
@@ -90,6 +111,20 @@ export const markitSchema = new Schema({
 });
 
 const markdownTokenizer = new MarkdownIt({ html: false, linkify: true, breaks: false });
+markdownTokenizer.use(footnote);
+markdownTokenizer.core.ruler.after('footnote_tail', 'markit_footnote_metadata', state => {
+  const list = ((state.env as { footnotes?: { list?: Array<{ content?: string }> } }).footnotes?.list || []);
+  const annotate = (tokens: Token[]) => {
+    for (const token of tokens) {
+      const meta = token.meta as { id?: number; label?: string; content?: string } | null;
+      if (token.type === 'footnote_ref' && meta && !meta.label) {
+        meta.content = list[meta.id || 0]?.content || '';
+      }
+      if (token.children) annotate(token.children);
+    }
+  };
+  annotate(state.tokens);
+});
 markdownTokenizer.block.ruler.before('hr', 'markit_front_matter', rawFrontMatterRule);
 markdownTokenizer.block.ruler.before('html_block', 'markit_comment', rawCommentRule);
 markdownTokenizer.block.ruler.before('fence', 'markit_raw_fence', rawFenceRule);
@@ -112,7 +147,11 @@ const markdownTokens = {
   s: { mark: 'strike' },
   markit_highlight: { mark: 'highlight' },
   table: { block: 'table' },
-  markit_raw_block: { node: 'raw_markdown', getAttrs: (token: MarkdownToken & { content?: string }) => ({ source: token.content || '' }) },
+  markit_raw_block: { node: 'raw_markdown', getAttrs: (token: MarkdownToken) => ({ source: token.content || '' }) },
+  footnote_ref: { node: 'footnote_reference', getAttrs: (token: MarkdownToken) => { const meta = (token.meta || {}) as { label?: string; content?: string; id?: number; subId?: number }; return { label: meta.label || '', content: meta.content || '', id: meta.id || 0, subId: meta.subId || 0 }; } },
+  footnote_anchor: { node: 'footnote_anchor', getAttrs: (token: MarkdownToken) => { const meta = (token.meta || {}) as { label?: string; id?: number; subId?: number }; return { label: meta.label || '', id: meta.id || 0, subId: meta.subId || 0 }; } },
+  footnote_block: { block: 'footnote_block' },
+  footnote: { block: 'footnote_item', getAttrs: (token: MarkdownToken) => { const meta = (token.meta || {}) as { label?: string; id?: number }; return { label: meta.label || '', id: meta.id || 0 }; } },
   thead: { ignore: true },
   tbody: { ignore: true },
   tr: { block: 'table_row' },
@@ -184,6 +223,21 @@ export const markdownSerializer = new MarkdownSerializer(
     ...defaultMarkdownSerializer.nodes,
     raw_markdown(state, node) {
       state.write(node.attrs.source);
+      state.closeBlock(node);
+    },
+    footnote_reference(state, node) {
+      state.write(node.attrs.label ? `[^${node.attrs.label}]` : `^[${node.attrs.content}]`);
+    },
+    footnote_anchor() {},
+    footnote_block(state, node) {
+      state.ensureNewLine();
+      node.forEach(item => {
+        if (!item.attrs.label) return;
+        state.write(`[^${item.attrs.label}]: `);
+        const first = item.firstChild;
+        if (first) state.renderInline(first);
+        state.write('\n');
+      });
       state.closeBlock(node);
     },
     table(state, node) {
