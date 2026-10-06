@@ -133,6 +133,7 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .pm-editor .md-footnote-ref { padding: 0 2px; font-size: .72em; vertical-align: super; }
 .pm-editor .md-footnote-ref a, .pm-editor .md-footnote-backref { color: var(--accent); text-decoration: none; }
 .pm-editor .md-footnote-backref { margin-left: 5px; }
+.pm-editor .md-raw-inline { padding: 0 2px; border-bottom: 1px dotted var(--text-faint); color: var(--text-muted); font-family: var(--editor-font-family); font-size: .94em; }
 .pm-editor pre { overflow: auto; margin: 18px 0; padding: 13px 15px; border: 1px solid var(--border); border-radius: 3px; background: var(--code-background); color: var(--code-text); font: 13px/1.6 var(--editor-font-family); white-space: pre-wrap; }
 .pm-editor .md-raw-block { max-height: 260px; border-style: dashed; color: var(--text-muted); white-space: pre-wrap; }
 .pm-editor code { padding: 2px 4px; border-radius: 3px; background: var(--tab-active); color: var(--code-text); font: .88em var(--editor-font-family); }

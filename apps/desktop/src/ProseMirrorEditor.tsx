@@ -12,7 +12,7 @@ import { tableEditing } from 'prosemirror-tables';
 import { Slice } from 'prosemirror-model';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
-import { markdownParser, markdownSerializer } from '../../../packages/editor/src/prosemirror';
+import { markdownParser, serializeMarkdownLike } from '../../../packages/editor/src/prosemirror';
 
 export interface LiveEditorHandle {
   focus(): void;
@@ -308,7 +308,7 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
         const next = editor.state.apply(transaction);
         editor.updateState(next);
         if (transaction.docChanged && !transaction.getMeta('markitProjection')) {
-          const serialized = restoreImages(markdownSerializer.serialize(next.doc), projectionRef.current.mappings);
+          const serialized = restoreImages(serializeMarkdownLike(next.doc, sourceRef.current), projectionRef.current.mappings);
           sourceRef.current = serialized;
           projectionRef.current.source = serialized;
           changeRef.current(serialized);

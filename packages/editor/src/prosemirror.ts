@@ -24,6 +24,7 @@ const tableSchema = tableNodes({
 });
 
 const rawFenceLanguages = new Set(['html', 'math', 'mermaid', 'plantuml', 'diagram', 'mdx']);
+const rawInlineTagPattern = /^<\/?[A-Za-z][^>\n]*>/;
 
 function lineText(state: StateBlock, line: number): string {
   return state.src.slice(state.bMarks[line], state.eMarks[line]);
@@ -109,6 +110,12 @@ export const markitSchema = new Schema({
     atom: true,
     attrs: { label: { default: '' }, id: { default: 0 }, subId: { default: 0 } },
     toDOM: node => ['a', { class: 'md-footnote-backref', href: `#fnref-${node.attrs.label}`, 'aria-label': 'Back to text' }, '↩'],
+  }).addToEnd('raw_inline', {
+    inline: true,
+    group: 'inline',
+    atom: true,
+    attrs: { source: { default: '' } },
+    toDOM: node => ['span', { class: 'md-raw-inline', contenteditable: 'false' }, node.attrs.source],
   }),
   marks: basicSchema.spec.marks.addToEnd('strike', {
     parseDOM: [{ tag: 's' }, { tag: 'del' }, { style: 'text-decoration=line-through' }],
@@ -152,6 +159,16 @@ markdownTokenizer.inline.ruler.before('emphasis', 'markit_highlight', (state, si
   state.pos += match[0].length;
   return true;
 });
+markdownTokenizer.inline.ruler.before('text', 'markit_raw_inline', (state, silent) => {
+  const match = rawInlineTagPattern.exec(state.src.slice(state.pos));
+  if (!match) return false;
+  if (!silent) {
+    const token = state.push('markit_raw_inline', '', 0);
+    token.content = match[0];
+  }
+  state.pos += match[0].length;
+  return true;
+});
 const markdownTokens = {
   ...defaultMarkdownParser.tokens,
   s: { mark: 'strike' },
@@ -162,6 +179,7 @@ const markdownTokens = {
   footnote_anchor: { node: 'footnote_anchor', getAttrs: (token: MarkdownToken) => { const meta = (token.meta || {}) as { label?: string; id?: number; subId?: number }; return { label: meta.label || '', id: meta.id || 0, subId: meta.subId || 0 }; } },
   footnote_block: { block: 'footnote_block' },
   footnote: { block: 'footnote_item', getAttrs: (token: MarkdownToken) => { const meta = (token.meta || {}) as { label?: string; id?: number }; return { label: meta.label || '', id: meta.id || 0 }; } },
+  markit_raw_inline: { node: 'raw_inline', getAttrs: (token: MarkdownToken) => ({ source: token.content || '' }) },
   thead: { ignore: true },
   tbody: { ignore: true },
   tr: { block: 'table_row' },
@@ -239,6 +257,9 @@ export const markdownSerializer = new MarkdownSerializer(
       state.write(node.attrs.label ? `[^${node.attrs.label}]` : `^[${node.attrs.content}]`);
     },
     footnote_anchor() {},
+    raw_inline(state, node) {
+      state.write(node.attrs.source);
+    },
     footnote_block(state, node) {
       state.ensureNewLine();
       node.forEach(item => {
@@ -276,6 +297,12 @@ export function parseMarkdown(source: string): MarkdownProjection {
 
 export function serializeMarkdown(document: ProseMirrorNode): string {
   return markdownSerializer.serialize(document);
+}
+
+/** Preserve the document's final newline while normalizing only edited content. */
+export function serializeMarkdownLike(document: ProseMirrorNode, previousSource: string): string {
+  const serialized = serializeMarkdown(document);
+  return previousSource.endsWith('\n') && !serialized.endsWith('\n') ? `${serialized}\n` : serialized;
 }
 
 export function isLosslessCandidate(source: string): boolean {

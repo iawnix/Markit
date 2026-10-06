@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractHeadings, renderHtmlDocument, slugForHeading } from '../packages/markdown/src/index';
-import { isLosslessCandidate, parseMarkdown, serializeMarkdown } from '../packages/editor/src/prosemirror';
+import { isLosslessCandidate, parseMarkdown, serializeMarkdown, serializeMarkdownLike } from '../packages/editor/src/prosemirror';
 import { normalizePermissions, requiresPrompt } from '../packages/plugin-sdk/src/permissions';
 import { PluginRegistry } from '../packages/plugin-sdk/src/registry';
 import { validateManifest } from '../packages/plugin-sdk/src/index';
@@ -20,6 +20,7 @@ describe('Markit Markdown core', () => {
     expect(serializeMarkdown(parseMarkdown(source).document)).toContain('# Title');
     expect(isLosslessCandidate(source)).toBe(true);
     expect(isLosslessCandidate('<!-- custom -->\n')).toBe(false);
+    expect(serializeMarkdownLike(parseMarkdown('# Title').document, '# Title\n')).toBe('# Title\n');
   });
 
   it('keeps GFM tables and strikethrough in the live projection', () => {
@@ -61,8 +62,11 @@ describe('Markit Markdown core', () => {
 
   it('keeps common inline HTML and custom directive text stable', () => {
     const source = 'Use <kbd>Ctrl</kbd> here.\n\n:::note\nKeep this block.\n:::\n';
-    const serialized = serializeMarkdown(parseMarkdown(source).document);
+    const document = parseMarkdown(source).document;
+    const serialized = serializeMarkdown(document);
     expect(serialized).toBe(source);
+    expect(document.firstChild?.firstChild?.type.name).toBe('text');
+    expect(document.firstChild?.child(1).type.name).toBe('raw_inline');
   });
 
   it('exports a complete HTML document without enabling raw HTML', () => {
