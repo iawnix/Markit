@@ -7,7 +7,7 @@ const messages = {
     emptyTitle: '开始写作', emptyBody: '打开一个 Markdown 文件，或创建一份新的文稿。', focusMode: '专注模式', exitFocus: '退出专注模式', showSidebar: '显示侧栏', hideSidebar: '隐藏侧栏',
     noOutline: '当前文稿还没有标题', searchHint: '输入关键词查找当前文稿', searchNoResults: '没有找到匹配内容', replacePlaceholder: '替换为', replaceCurrent: '替换当前', replaceAll: '全部替换', words: '字', saved: '已保存', unsaved: '未保存',
     openPath: '打开文件路径', language: '语言', chinese: '简体中文', english: 'English', theme: '主题', themeSystem: '跟随系统', themeLight: '浅色', themeDark: '深色', resizeSidebar: '调整侧栏宽度', editorAppearance: '编辑器外观', editorFont: '编辑器字体', editorFontSize: '字号', fontSystem: '系统等宽', fontNoto: 'Noto Sans Mono', fontSarasa: 'Sarasa Mono', fontJetBrains: 'JetBrains Mono',
-    plugins: '插件', installPlugin: '安装插件', noPlugins: '尚未安装插件。', enablePlugin: '启用', disablePlugin: '停用', removePlugin: '卸载', pluginPanelReady: '插件面板已加载', pluginPanelProvider: '由插件提供', pluginSearchPlaceholder: '搜索文献后按 Enter', pluginNoResults: '暂无结果',
+    plugins: '插件', installPlugin: '安装插件', noPlugins: '尚未安装插件。', enablePlugin: '启用', disablePlugin: '停用', removePlugin: '卸载', pluginPanelReady: '插件面板已加载', pluginPanelProvider: '由插件提供', pluginSearchPlaceholder: '搜索文献后按 Enter', pluginNoResults: '暂无结果', linkEditorTitle: '编辑链接', linkURL: '链接地址', cancel: '取消', apply: '应用',
     pluginPermissions: '请求权限', pluginIntegrity: '完整性已验证', pluginUnsigned: '未签名', pluginInstallError: '插件安装失败', pluginPermissionPrompt: '此插件请求高风险权限，启用前请确认：',
   },
   en: {
@@ -16,7 +16,7 @@ const messages = {
     emptyTitle: 'Start writing', emptyBody: 'Open a Markdown file or create a new document.', focusMode: 'Focus mode', exitFocus: 'Exit focus mode', showSidebar: 'Show sidebar', hideSidebar: 'Hide sidebar',
     noOutline: 'This document has no headings yet', searchHint: 'Search this document', searchNoResults: 'No matches found', replacePlaceholder: 'Replace with', replaceCurrent: 'Replace', replaceAll: 'Replace all', words: 'words', saved: 'Saved', unsaved: 'Unsaved',
     openPath: 'Open file path', language: 'Language', chinese: '简体中文', english: 'English', theme: 'Theme', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark', resizeSidebar: 'Resize sidebar', editorAppearance: 'Editor appearance', editorFont: 'Editor font', editorFontSize: 'Font size', fontSystem: 'System monospace', fontNoto: 'Noto Sans Mono', fontSarasa: 'Sarasa Mono', fontJetBrains: 'JetBrains Mono',
-    plugins: 'Plugins', installPlugin: 'Install plugin', noPlugins: 'No plugins installed yet.', enablePlugin: 'Enable', disablePlugin: 'Disable', removePlugin: 'Remove', pluginPanelReady: 'Plugin panel loaded', pluginPanelProvider: 'Provided by plugin', pluginSearchPlaceholder: 'Search references and press Enter', pluginNoResults: 'No results yet',
+    plugins: 'Plugins', installPlugin: 'Install plugin', noPlugins: 'No plugins installed yet.', enablePlugin: 'Enable', disablePlugin: 'Disable', removePlugin: 'Remove', pluginPanelReady: 'Plugin panel loaded', pluginPanelProvider: 'Provided by plugin', pluginSearchPlaceholder: 'Search references and press Enter', pluginNoResults: 'No results yet', linkEditorTitle: 'Edit link', linkURL: 'Link URL', cancel: 'Cancel', apply: 'Apply',
     pluginPermissions: 'Requested permissions', pluginIntegrity: 'Integrity verified', pluginUnsigned: 'Unsigned', pluginInstallError: 'Plugin installation failed', pluginPermissionPrompt: 'This plugin requests high-risk permissions. Confirm before enabling:',
   },
 } as const;

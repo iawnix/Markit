@@ -19,7 +19,7 @@ export interface LiveEditorHandle {
   insertMarkdown?: (markdown: string) => void;
 }
 
-interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; linkPrompt?: string; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
+interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; linkPrompt?: string; onRequestLink?(currentHref: string): Promise<string | null>; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
 
 interface Projection { source: string; mappings: Map<string, string> }
 
@@ -47,20 +47,28 @@ function linkInputRule(linkType: MarkType): InputRule {
   });
 }
 
-function editLink(state: EditorState, dispatch: ((transaction: Transaction) => void) | undefined, promptText: string): boolean {
+function selectedLinkHref(state: EditorState): string {
   const { from, to } = state.selection;
-  if (from === to) return false;
+  if (from === to) return '';
   const link = state.schema.marks.link;
   let current = '';
   state.doc.nodesBetween(from, to, node => {
     const mark = node.marks.find(item => item.type === link);
     if (mark && typeof mark.attrs.href === 'string') current = mark.attrs.href;
   });
-  const href = window.prompt(promptText, current || 'https://');
+  return current;
+}
+
+function editLink(state: EditorState, dispatch: ((transaction: Transaction) => void) | undefined, promptText: string): boolean {
+  const { from, to } = state.selection;
+  if (from === to) return false;
+  const link = state.schema.marks.link;
+  const href = window.prompt(promptText, selectedLinkHref(state) || 'https://');
   if (href === null) return true;
   if (dispatch) {
     const transaction = state.tr.removeMark(from, to, link);
-    if (href) transaction.addMark(from, to, link.create({ href, title: null }));
+    const safeHref = safeLinkHref(href);
+    if (safeHref) transaction.addMark(from, to, link.create({ href: safeHref, title: null }));
     dispatch(transaction.scrollIntoView());
   }
   return true;
@@ -268,7 +276,7 @@ function restoreImages(source: string, mappings: Map<string, string>): string {
   return restored;
 }
 
-export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', linkPrompt = 'Link URL', onChange, onImageFiles }, ref) {
+export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', linkPrompt = 'Link URL', onRequestLink, onChange, onImageFiles }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const sourceRef = useRef(source);
@@ -277,12 +285,14 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
   const searchQueryRef = useRef(searchQuery);
   const onImageFilesRef = useRef(onImageFiles);
   const linkPromptRef = useRef(linkPrompt);
+  const onRequestLinkRef = useRef(onRequestLink);
   const projectionRef = useRef({ source: '', documentPath: null as string | null, mappings: new Map<string, string>() });
   changeRef.current = onChange;
   citationMapRef.current = citationMap;
   searchQueryRef.current = searchQuery;
   onImageFilesRef.current = onImageFiles;
   linkPromptRef.current = linkPrompt;
+  onRequestLinkRef.current = onRequestLink;
 
   useImperativeHandle(ref, () => ({
     focus() { view.current?.focus(); },
@@ -313,7 +323,28 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
             'Mod-b': toggleMark(markdownParser.schema.marks.strong),
             'Mod-i': toggleMark(markdownParser.schema.marks.em),
             'Mod-Shift-x': toggleMark(markdownParser.schema.marks.strike),
-            'Mod-k': (state, dispatch) => editLink(state, dispatch, linkPromptRef.current),
+            'Mod-k': (state, dispatch) => {
+              const requestLink = onRequestLinkRef.current;
+              if (!requestLink) return editLink(state, dispatch, linkPromptRef.current);
+              const { from, to } = state.selection;
+              if (from === to) return false;
+              const currentHref = selectedLinkHref(state);
+              void requestLink(currentHref).then(href => {
+                if (href === null) return;
+                const currentEditor = view.current;
+                if (!currentEditor) return;
+                const start = Math.min(from, currentEditor.state.doc.content.size);
+                const end = Math.min(to, currentEditor.state.doc.content.size);
+                if (start >= end) return;
+                const link = currentEditor.state.schema.marks.link;
+                const transaction = currentEditor.state.tr.removeMark(start, end, link);
+                const safeHref = safeLinkHref(href);
+                if (safeHref) transaction.addMark(start, end, link.create({ href: safeHref, title: null }));
+                currentEditor.dispatch(transaction.scrollIntoView());
+                currentEditor.focus();
+              }).catch(() => undefined);
+              return true;
+            },
             'Mod-z': undo,
             'Mod-y': redo,
             'Mod-Shift-z': redo,
