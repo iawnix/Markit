@@ -69,6 +69,7 @@ export default function App() {
   const [documents, setDocuments] = useState<DocumentSnapshot[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [headings, setHeadings] = useState<OutlineEntry[]>([]);
+  const [activeHeadingIndex, setActiveHeadingIndex] = useState(-1);
   const [workspace, setWorkspace] = useState('');
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [query, setQuery] = useState('');
@@ -85,6 +86,7 @@ export default function App() {
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const editorRef = useRef<SourceEditorHandle & Partial<LiveEditorHandle>>(null);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
   const documentsRef = useRef<DocumentSnapshot[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pluginInputRef = useRef<HTMLInputElement>(null);
@@ -118,6 +120,7 @@ export default function App() {
   useEffect(() => {
     if (!active) {
       setHeadings([]);
+      setActiveHeadingIndex(-1);
       return;
     }
     let cancelled = false;
@@ -126,6 +129,35 @@ export default function App() {
     });
     return () => { cancelled = true; };
   }, [active?.id, active?.source]);
+  useEffect(() => {
+    const container = editorScrollRef.current;
+    if (!container || !active || active.mode !== 'live' || !headings.length) {
+      setActiveHeadingIndex(-1);
+      return;
+    }
+    let frame = 0;
+    const sync = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const elements = Array.from(container.querySelectorAll<HTMLElement>('.pm-editor h1, .pm-editor h2, .pm-editor h3, .pm-editor h4, .pm-editor h5, .pm-editor h6'));
+        if (!elements.length) return;
+        const boundary = container.getBoundingClientRect().top + 96;
+        let current = 0;
+        elements.forEach((element, index) => {
+          if (element.getBoundingClientRect().top <= boundary) current = index;
+        });
+        setActiveHeadingIndex(current);
+      });
+    };
+    container.addEventListener('scroll', sync, { passive: true });
+    sync();
+    const timer = window.setTimeout(sync, 80);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      container.removeEventListener('scroll', sync);
+    };
+  }, [active?.id, active?.source, active?.mode, headings.length]);
   useEffect(() => {
     if (!isTauriRuntime) return;
     let cancelled = false;
@@ -308,6 +340,7 @@ export default function App() {
 
   function jumpToHeading(item: OutlineEntry) {
     const index = headings.indexOf(item);
+    setActiveHeadingIndex(index);
     if (active?.mode === 'source' && editorRef.current) {
       editorRef.current.focus();
       editorRef.current.setSelection(item.offset);
@@ -646,7 +679,7 @@ export default function App() {
         </div>
         <div className="sidebar-content">
           {sidebar === 'files' && <><div className="sidebar-heading"><span>{t('files')}</span><span><button className="icon-button" title="Open folder" aria-label="Open folder" onClick={() => void chooseWorkspace()}><FolderOpen size={15} /></button><button className="icon-button" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={15} /></button></span></div><p className="workspace-path">{workspace || 'Local workspace'}</p>{entries.filter(entry => !entry.directory && /\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)).map(entry => <button key={entry.path} className={`file-row ${active?.path === entry.path ? 'active' : ''}`} onClick={() => void openPath(entry.path)}><FileText size={15} /><span>{entry.name}</span></button>)}{!entries.length && <button className="file-row active" onClick={() => void chooseDocument()}><FileText size={15} /><span>{active ? titleFor(active.path, locale) : t('emptyTitle')}</span></button>}</>}
-          {sidebar === 'outline' && <><div className="sidebar-heading"><span>{t('outline')}</span><span className="count">{headings.length}</span></div>{filteredHeadings.length ? <nav className="outline-list">{filteredHeadings.map(item => <button key={item.id} style={{ paddingLeft: `${12 + item.level * 10}px` }} onClick={() => jumpToHeading(item)}>{item.text}</button>)}</nav> : <p className="empty-sidebar">{t('noOutline')}</p>}</>}
+          {sidebar === 'outline' && <><div className="sidebar-heading"><span>{t('outline')}</span><span className="count">{headings.length}</span></div>{filteredHeadings.length ? <nav className="outline-list">{filteredHeadings.map((item, index) => <button key={item.id} className={index === activeHeadingIndex ? 'active' : ''} style={{ paddingLeft: `${12 + item.level * 10}px` }} onClick={() => jumpToHeading(item)}>{item.text}</button>)}</nav> : <p className="empty-sidebar">{t('noOutline')}</p>}</>}
           {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span><span className="count">{query ? searchResults.length : ''}</span></div><input className="sidebar-search" value={query} onChange={event => { setQuery(event.target.value); setSearchIndex(0); }} placeholder={t('search')} /><input className="sidebar-search" value={replacement} onChange={event => setReplacement(event.target.value)} placeholder={t('replacePlaceholder')} disabled={!query.trim()} /><div className="search-actions"><button className="secondary-command" onClick={replaceCurrent} disabled={!query.trim() || !searchResults.length}>{t('replaceCurrent')}</button><button className="secondary-command" onClick={replaceAll} disabled={!query.trim() || !searchResults.length}>{t('replaceAll')}</button></div>{query && searchResults.length ? <div className="search-results">{searchResults.map((result, index) => <button className={`search-result ${index === searchIndex ? 'active' : ''}`} key={`${result.offset}:${index}`} onClick={() => jumpToSearch(result.offset, index)}><strong>{result.text}</strong><small>#{index + 1}</small></button>)}</div> : query ? <p className="empty-sidebar">{t('searchNoResults')}</p> : <p className="empty-sidebar">{t('searchHint')}</p>}</>}
           {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div>{selectedPluginPanel.searchCommand && <input className="plugin-panel-search" aria-label={t('pluginSearchPlaceholder')} placeholder={t('pluginSearchPlaceholder')} onKeyDown={event => { if (event.key === 'Enter') { const command = pluginCommands.find(item => item.pluginId === selectedPluginPanel.pluginId && item.id === selectedPluginPanel.searchCommand); if (command) void runPluginCommand(command, [(event.currentTarget as HTMLInputElement).value]); } }} />}{selectedPluginPanel.content?.status && <p className="plugin-panel-status">{selectedPluginPanel.content.status}</p>}{selectedPluginPanel.content?.items?.length ? <div className="plugin-panel-items">{selectedPluginPanel.content.items.map(item => <button className="plugin-panel-item" key={item.id} onClick={() => item.command && runPanelAction(selectedPluginPanel, item.command)} disabled={!item.command}><strong>{item.title}</strong>{item.meta && <small>{item.meta}</small>}</button>)}</div> : <p className="plugin-panel-status">{t('pluginNoResults')}</p>}{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
         </div>
@@ -657,7 +690,7 @@ export default function App() {
         {active ? <>
           <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
-      <div className="editor-scroll"><div className={`editor-column ${active.mode === 'source' ? 'source-editor-column' : 'live-editor-column'}`}>{active.mode === 'source' ? <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} source={active.source} searchQuery={query} onChange={updateSource} onImageFiles={files => { void insertImages(files); }} /></Suspense> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor ref={editorRef} source={active.source} documentPath={active.path} citationMap={citationMap} searchQuery={query} linkPrompt={locale === 'zh-CN' ? '链接地址' : 'Link URL'} onChange={updateSource} onImageFiles={(files, position) => { void insertImages(files, position); }} /></Suspense>}</div></div>
+      <div ref={editorScrollRef} className="editor-scroll"><div className={`editor-column ${active.mode === 'source' ? 'source-editor-column' : 'live-editor-column'}`}>{active.mode === 'source' ? <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} source={active.source} searchQuery={query} onChange={updateSource} onImageFiles={files => { void insertImages(files); }} /></Suspense> : <Suspense fallback={<div className="editor-loading">Loading editor…</div>}><ProseMirrorEditor ref={editorRef} source={active.source} documentPath={active.path} citationMap={citationMap} searchQuery={query} linkPrompt={locale === 'zh-CN' ? '链接地址' : 'Link URL'} onChange={updateSource} onImageFiles={(files, position) => { void insertImages(files, position); }} /></Suspense>}</div></div>
           <footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className={`status-mode-option ${active.mode === 'source' ? 'selected' : ''}`} title={t('source')} aria-label={t('source')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}><Code2 size={14} /></button><button className={`status-mode-option ${active.mode === 'live' ? 'selected' : ''}`} title={t('preview')} aria-label={t('preview')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></div></footer>
         </> : <><div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div><footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className="status-mode-option" title={t('source')} aria-label={t('source')} disabled><Code2 size={14} /></button><button className="status-mode-option" title={t('preview')} aria-label={t('preview')} disabled><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>0 {t('words')}</span><span>Local</span><span>{t('saved')}</span></div></footer></>}
       </main>

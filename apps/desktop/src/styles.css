@@ -81,7 +81,7 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .workspace-path { margin: 0 0 12px; overflow: hidden; color: var(--text-faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .file-row, .outline-list button { width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: 3px; background: transparent; color: var(--text-muted); text-align: left; font-size: 12px; }
 .file-row svg { color: var(--text-faint); }
-.file-row:hover, .file-row.active, .outline-list button:hover { background: var(--surface-hover); color: var(--text); }
+.file-row:hover, .file-row.active, .outline-list button:hover, .outline-list button.active { background: var(--surface-hover); color: var(--text); }
 .outline-list { display: flex; flex-direction: column; gap: 2px; }
 .outline-list button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty-sidebar { margin: 20px 0; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
