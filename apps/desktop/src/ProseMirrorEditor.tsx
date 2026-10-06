@@ -8,7 +8,7 @@ import { keymap } from 'prosemirror-keymap';
 import type { MarkType } from 'prosemirror-model';
 import { EditorState, Plugin, TextSelection } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
-import { tableEditing } from 'prosemirror-tables';
+import { addRowAfter, goToNextCell, isInTable, selectedRect, tableEditing } from 'prosemirror-tables';
 import { Slice } from 'prosemirror-model';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
@@ -164,6 +164,19 @@ function exitCodeOnEmptyLine(state: EditorState, dispatch?: (transaction: Transa
   return exitCode(state, dispatch);
 }
 
+function tabThroughTable(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
+  if (!isInTable(state)) return false;
+  if (goToNextCell(1)(state, dispatch)) return true;
+  const rect = selectedRect(state);
+  if (!dispatch) return true;
+  const rowPosition = rect.tableStart + Array.from({ length: rect.bottom }, (_, index) => rect.table.child(index).nodeSize).reduce((sum, size) => sum + size, 0);
+  addRowAfter(state, transaction => {
+    const cell = transaction.doc.resolve(rowPosition + 1);
+    dispatch(transaction.setSelection(TextSelection.near(cell)).scrollIntoView());
+  });
+  return true;
+}
+
 function createLiveInputRules(schema: typeof markdownParser['schema']) {
   const heading = schema.nodes.heading;
   const codeBlock = schema.nodes.code_block;
@@ -261,6 +274,8 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
             ...baseKeymap,
             Enter: chainCommands(exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
             Backspace: chainCommands(undoInputRule, deleteEmptyHeading, baseKeymap.Backspace),
+            Tab: tabThroughTable,
+            'Shift-Tab': goToNextCell(-1),
             'Mod-b': toggleMark(markdownParser.schema.marks.strong),
             'Mod-i': toggleMark(markdownParser.schema.marks.em),
             'Mod-Shift-x': toggleMark(markdownParser.schema.marks.strike),
