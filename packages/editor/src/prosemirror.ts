@@ -205,6 +205,16 @@ const markdownMarks = {
   highlight: { open: '==', close: '==', mixable: true },
 };
 
+function serializeText(state: { text(value: string, escape?: boolean): void; inAutolink?: boolean }, node: ProseMirrorNode, parent: ProseMirrorNode | null, index: number) {
+  const taskPrefix = /^\[[ xX]\]\s/.exec(node.text || '');
+  if (parent?.type.name === 'paragraph' && index === 0 && taskPrefix && node.marks.length === 0) {
+    state.text(taskPrefix[0], false);
+    state.text((node.text || '').slice(taskPrefix[0].length), !state.inAutolink);
+    return;
+  }
+  state.text(node.text || '', !state.inAutolink);
+}
+
 function escapeTableText(value: string): string {
   return value.replace(/[\\`*_[\]~]/g, character => `\\${character}`);
 }
@@ -294,6 +304,7 @@ export const markdownSerializer = new MarkdownSerializer(
       state.write(rows.join('\n'));
       state.closeBlock(node);
     },
+    text: serializeText,
   },
   markdownMarks,
 );

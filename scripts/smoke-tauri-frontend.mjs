@@ -50,7 +50,7 @@ try {
   await sourceMode.click();
   const sourceEditor = page.locator('.cm-content');
   await sourceEditor.waitFor();
-  const source = '# Markit\n\n## Writing\n\nSearchable Markit text.\n\n**Bold** and `code`. Inline $x^2$ math.\n\n$$y = x + 1$$\n\n```javascript\nconst ready = true;\n```\n';
+  const source = '# Markit\n\n## Writing\n\nSearchable Markit text.\n\n**Bold** and `code`. Inline $x^2$ math.\n\n- [ ] Pending task\n\n$$y = x + 1$$\n\n```javascript\nconst ready = true;\n```\n';
   await sourceEditor.click();
   await page.keyboard.press('Control+A');
   await page.keyboard.insertText(source);
@@ -62,8 +62,9 @@ try {
   await page.locator('.pm-editor h2', { hasText: 'Writing' }).waitFor();
   await page.locator('.pm-editor .md-math-inline').waitFor();
   await page.locator('.pm-editor .md-math-display').waitFor();
+  await page.locator('.pm-editor .md-task-checkbox').waitFor();
   await page.locator('.pm-editor pre code').waitFor();
-  checks.push('live preview rendering', 'formula and fenced code rendering');
+  checks.push('live preview rendering', 'formula, task list and fenced code rendering');
 
   await page.getByRole('button', { name: '大纲', exact: true }).click();
   await page.locator('.outline-list button', { hasText: 'Writing' }).waitFor();

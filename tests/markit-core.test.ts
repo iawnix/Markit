@@ -44,6 +44,13 @@ describe('Markit Markdown core', () => {
     expect(serialized).toContain('**42**');
   });
 
+  it('preserves task list markers when serializing the live projection', () => {
+    const serialized = serializeMarkdown(parseMarkdown('- [ ] todo\n- [x] done\n').document);
+    expect(serialized).toContain('[ ] todo');
+    expect(serialized).toContain('[x] done');
+    expect(serialized).not.toContain('\\[');
+  });
+
   it('round-trips highlight marks in the live projection', () => {
     const source = 'A ==highlight== and ~~removed~~.';
     expect(serializeMarkdown(parseMarkdown(source).document)).toContain('==highlight==');
