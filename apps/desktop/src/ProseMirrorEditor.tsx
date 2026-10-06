@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { baseKeymap } from 'prosemirror-commands';
+import { baseKeymap, chainCommands, createParagraphNear, exitCode, liftEmptyBlock, newlineInCode, splitBlock } from 'prosemirror-commands';
+import { InputRule, inputRules, textblockTypeInputRule, undoInputRule, wrappingInputRule } from 'prosemirror-inputrules';
 import { history, redo, undo } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
+import type { MarkType } from 'prosemirror-model';
 import { EditorState, Plugin } from 'prosemirror-state';
+import type { Transaction } from 'prosemirror-state';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
 import { markdownParser, markdownSerializer } from '../../../packages/editor/src/prosemirror';
@@ -15,6 +18,16 @@ interface Projection { source: string; mappings: Map<string, string> }
 
 const imagePattern = /!\[[^\]]*\]\((?:<([^>\n]+)>|([^\s)\n]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g;
 const citationPattern = /\[(?:@[A-Z0-9]{8})(?:\s*;\s*@[A-Z0-9]{8})*\]/gu;
+
+function markInputRule(regexp: RegExp, markType: MarkType): InputRule {
+  return new InputRule(regexp, (state, match, start, end) => {
+    const boundary = match[1]?.length || 0;
+    const content = match[3];
+    if (!match[2] || !content) return null;
+    const from = start + boundary;
+    return state.tr.replaceWith(from, end, state.schema.text(content, [markType.create()]));
+  });
+}
 
 function citationDecorations(state: EditorState, citationMap: Record<string, number>): DecorationSet {
   const decorations: Decoration[] = [];
@@ -78,7 +91,7 @@ function mathDecorations(state: EditorState): DecorationSet {
   const selectionFrom = state.selection.from;
   const selectionTo = state.selection.to;
   const selectionTouches = (from: number, to: number) => selectionFrom === selectionTo
-    ? selectionFrom > from && selectionFrom < to
+    ? selectionFrom >= from && selectionFrom <= to
     : selectionFrom < to && selectionTo > from;
   state.doc.descendants((node, position) => {
     if (node.type.name === 'code_block') return false;
@@ -104,6 +117,43 @@ function mathDecorations(state: EditorState): DecorationSet {
     }
   });
   return DecorationSet.create(state.doc, decorations);
+}
+
+function deleteEmptyHeading(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
+  const cursor = state.selection.$cursor;
+  if (!cursor || cursor.parent.type !== state.schema.nodes.heading || cursor.parent.content.size > 0) return false;
+  if (dispatch) dispatch(state.tr.setBlockType(cursor.before(), cursor.after(), state.schema.nodes.paragraph).scrollIntoView());
+  return true;
+}
+
+function exitCodeOnEmptyLine(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
+  const cursor = state.selection.$cursor;
+  if (!cursor || cursor.parent.type !== state.schema.nodes.code_block || cursor.parentOffset !== cursor.parent.content.size) return false;
+  if (!cursor.parent.textContent.endsWith('\n')) return false;
+  return exitCode(state, dispatch);
+}
+
+function createLiveInputRules(schema: typeof markdownParser['schema']) {
+  const heading = schema.nodes.heading;
+  const codeBlock = schema.nodes.code_block;
+  const blockquote = schema.nodes.blockquote;
+  const bulletList = schema.nodes.bullet_list;
+  const orderedList = schema.nodes.ordered_list;
+  const strong = schema.marks.strong;
+  const em = schema.marks.em;
+  const code = schema.marks.code;
+  return [
+    textblockTypeInputRule(/^(#{1,6})\s$/, heading, match => ({ level: match[1].length })),
+    textblockTypeInputRule(/^```([A-Za-z0-9_-]+)?\s?$/, codeBlock, match => ({ params: match[1] || null })),
+    wrappingInputRule(/^\s*>\s$/, blockquote),
+    wrappingInputRule(/^\s*([-+*])\s$/, bulletList),
+    wrappingInputRule(/^\s*(\d+)\.\s$/, orderedList, match => ({ order: Number(match[1]) })),
+    markInputRule(/(^|[^\w])(\*\*)(?=\S)([^*_]+?\S)\2$/, strong),
+    markInputRule(/(^|[^\w])(__)(?=\S)([^*_]+?\S)\2$/, strong),
+    markInputRule(/(^|[^\w])(\*)(?=\S)([^*_]+?\S)\2$/, em),
+    markInputRule(/(^|[^\w])(_)(?=\S)([^*_]+?\S)\2$/, em),
+    markInputRule(/(^|[^\w])(`)(?=\S)([^`]+?\S)\2$/, code),
+  ];
 }
 
 async function projectImages(source: string, documentPath: string | null): Promise<Projection> {
@@ -155,12 +205,24 @@ export function ProseMirrorEditor({ source, documentPath, citationMap = {}, sear
     const editor = new EditorView(host.current, {
       state: EditorState.create({
         doc: markdownParser.parse(source),
-        plugins: [history(), keymap({ ...baseKeymap, 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }), new Plugin({ props: { decorations: state => {
+        plugins: [
+          history(),
+          inputRules({ rules: createLiveInputRules(markdownParser.schema) }),
+          keymap({
+            ...baseKeymap,
+            Enter: chainCommands(exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
+            Backspace: chainCommands(undoInputRule, deleteEmptyHeading, baseKeymap.Backspace),
+            'Mod-z': undo,
+            'Mod-y': redo,
+            'Mod-Shift-z': redo,
+          }),
+          new Plugin({ props: { decorations: state => {
           const citations = citationDecorations(state, citationMapRef.current).find();
           const math = mathDecorations(state).find();
           const matches = searchDecorations(state, searchQueryRef.current).find();
           return DecorationSet.create(state.doc, [...citations, ...math, ...matches]);
-        } } })],
+          } } }),
+        ],
       }),
       dispatchTransaction(transaction) {
         const next = editor.state.apply(transaction);

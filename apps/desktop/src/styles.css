@@ -115,7 +115,7 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .source-editor-codemirror .cm-search-hit { border-radius: 2px; background: #9d8140; color: #fff; box-shadow: 0 0 0 1px #c5a95c66; }
 .live-editor, .pm-editor .ProseMirror { min-height: 480px; }
 .pm-editor { min-height: 480px; outline: 0; color: var(--text); font-family: var(--editor-font-family); font-size: var(--editor-font-size); line-height: 1.85; }
-.pm-editor .ProseMirror { outline: 0; }
+.pm-editor .ProseMirror { outline: 0; caret-color: var(--text); }
 .pm-editor h1, .pm-editor h2, .pm-editor h3 { color: var(--heading); line-height: 1.28; letter-spacing: 0; }
 .pm-editor h1 { padding-bottom: 13px; border-bottom: 1px solid var(--rule); font-size: 34px; }
 .pm-editor h2 { margin-top: 38px; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 25px; }
