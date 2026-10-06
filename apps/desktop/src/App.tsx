@@ -111,7 +111,17 @@ export default function App() {
     return () => { window.removeEventListener('markit:open-path', onOpen); unlisten?.(); };
   }, []);
 
-  useEffect(() => { if (active) void outline(active.source).then(setHeadings); }, [active?.id, active?.source]);
+  useEffect(() => {
+    if (!active) {
+      setHeadings([]);
+      return;
+    }
+    let cancelled = false;
+    void outline(active.source).then(nextHeadings => {
+      if (!cancelled) setHeadings(nextHeadings);
+    });
+    return () => { cancelled = true; };
+  }, [active?.id, active?.source]);
   useEffect(() => {
     if (!isTauriRuntime) return;
     let cancelled = false;
@@ -526,7 +536,14 @@ export default function App() {
     }
     return results;
   }, [active?.id, active?.source, query]);
-  const closeDocument = (id: string) => { setDocuments(current => current.filter(item => item.id !== id)); if (activeId === id) setActiveId(documents.find(item => item.id !== id)?.id || null); };
+  const closeDocument = (id: string) => {
+    if (activeId === id) {
+      const index = documents.findIndex(item => item.id === id);
+      const next = documents[index + 1] || documents[index - 1] || null;
+      setActiveId(next?.id || null);
+    }
+    setDocuments(current => current.filter(item => item.id !== id));
+  };
   const dragWindow = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0 || !isTauriRuntime) return;
     void getCurrentWindow().startDragging().catch(() => undefined);
