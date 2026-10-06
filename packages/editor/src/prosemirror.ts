@@ -26,6 +26,17 @@ const tableSchema = tableNodes({
 const rawFenceLanguages = new Set(['html', 'math', 'mermaid', 'plantuml', 'diagram', 'mdx']);
 const rawInlineTagPattern = /^<\/?[A-Za-z][^>\n]*>/;
 
+export function safeLinkHref(value: string): string | null {
+  const href = value.trim();
+  if (!href || /[\u0000-\u001f\u007f]/u.test(href) || /^\/\//u.test(href)) return null;
+  const scheme = /^([a-z][a-z\d+.-]*):/iu.exec(href)?.[1]?.toLowerCase();
+  if (scheme && !['http', 'https', 'mailto', 'tel'].includes(scheme)) return null;
+  if (scheme) {
+    try { new URL(href); } catch { return null; }
+  }
+  return href;
+}
+
 function lineText(state: StateBlock, line: number): string {
   return state.src.slice(state.bMarks[line], state.eMarks[line]);
 }
@@ -171,6 +182,7 @@ markdownTokenizer.inline.ruler.before('text', 'markit_raw_inline', (state, silen
 });
 const markdownTokens = {
   ...defaultMarkdownParser.tokens,
+  link_open: { mark: 'link', getAttrs: (token: MarkdownToken) => ({ href: safeLinkHref(token.attrGet('href') || '') || '#', title: token.attrGet('title') }) },
   s: { mark: 'strike' },
   markit_highlight: { mark: 'highlight' },
   table: { block: 'table' },

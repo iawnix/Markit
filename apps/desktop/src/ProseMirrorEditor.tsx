@@ -12,7 +12,7 @@ import { addRowAfter, goToNextCell, isInTable, selectedRect, tableEditing } from
 import { Slice } from 'prosemirror-model';
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 import { registerAsset } from './bridge';
-import { markdownParser, serializeMarkdownLike } from '../../../packages/editor/src/prosemirror';
+import { markdownParser, safeLinkHref, serializeMarkdownLike } from '../../../packages/editor/src/prosemirror';
 
 export interface LiveEditorHandle {
   focus(): void;
@@ -40,7 +40,7 @@ function linkInputRule(linkType: MarkType): InputRule {
   return new InputRule(/(^|[^\w])\[([^\]\n]+)\]\(([^\s)]+)\)$/, (state, match, start, end) => {
     const boundary = match[1]?.length || 0;
     const content = match[2];
-    const href = match[3];
+    const href = safeLinkHref(match[3]);
     if (!content || !href) return null;
     const from = start + boundary;
     return state.tr.replaceWith(from, end, state.schema.text(content, [linkType.create({ href, title: null })]));
@@ -60,7 +60,7 @@ function editLink(state: EditorState, dispatch: ((transaction: Transaction) => v
   if (href === null) return true;
   if (dispatch) {
     const transaction = state.tr.removeMark(from, to, link);
-    if (href.trim()) transaction.addMark(from, to, link.create({ href: href.trim(), title: null }));
+    if (href) transaction.addMark(from, to, link.create({ href, title: null }));
     dispatch(transaction.scrollIntoView());
   }
   return true;

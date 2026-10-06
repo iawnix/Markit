@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractHeadings, renderHtmlDocument, slugForHeading } from '../packages/markdown/src/index';
-import { isLosslessCandidate, parseMarkdown, serializeMarkdown, serializeMarkdownLike } from '../packages/editor/src/prosemirror';
+import { isLosslessCandidate, parseMarkdown, safeLinkHref, serializeMarkdown, serializeMarkdownLike } from '../packages/editor/src/prosemirror';
 import { normalizePermissions, requiresPrompt } from '../packages/plugin-sdk/src/permissions';
 import { PluginRegistry } from '../packages/plugin-sdk/src/registry';
 import { validateManifest } from '../packages/plugin-sdk/src/index';
@@ -22,6 +22,17 @@ describe('Markit Markdown core', () => {
     expect(isLosslessCandidate(source)).toBe(true);
     expect(isLosslessCandidate('<!-- custom -->\n')).toBe(false);
     expect(serializeMarkdownLike(parseMarkdown('# Title').document, '# Title\n')).toBe('# Title\n');
+  });
+
+  it('keeps live editor links limited to safe destinations', () => {
+    expect(safeLinkHref('https://example.com/docs')).toBe('https://example.com/docs');
+    expect(safeLinkHref('#section')).toBe('#section');
+    expect(safeLinkHref('../notes.md')).toBe('../notes.md');
+    expect(safeLinkHref('javascript:alert(1)')).toBeNull();
+    expect(safeLinkHref('//example.com')).toBeNull();
+    const document = parseMarkdown('[safe](https://example.com) [blocked](javascript:alert(1))').document;
+    expect(serializeMarkdown(document)).toContain('[safe](https://example.com)');
+    expect(serializeMarkdown(document)).toContain('\\[blocked\\](javascript:alert(1))');
   });
 
   it('keeps GFM tables and strikethrough in the live projection', () => {
