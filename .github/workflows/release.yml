@@ -179,6 +179,15 @@ jobs:
             printf '%s\n' "${actual[@]}" | grep -Fxq "$name"
           done
 
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find release-assets -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\n' | sort)
+          test "${#files[@]}" -gt 0
+          (cd release-assets && sha256sum "${files[@]}") > release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum -c SHA256SUMS.txt)
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -195,6 +204,7 @@ jobs:
 
           Linux packages include AppImage, Debian, RPM and portable tar.gz builds.
           The Linux packages use the system WebKitGTK runtime documented in the repository.
+          SHA256SUMS.txt contains checksums for every binary and plugin asset.
           EOF
           if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" --repo "$GH_REPO" release-assets/* --clobber
@@ -221,6 +231,7 @@ jobs:
             "Markit-$version-Linux-x64.rpm"
             "Markit-$version-Linux-x64.tar.gz"
             "Markit-citations-$plugin_version.markit-plugin"
+            "SHA256SUMS.txt"
           )
           for name in "${expected[@]}"; do
             gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name' | grep -Fxq "$name"

@@ -36,13 +36,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the release.' }
           if ($release.tag_name -cne $env:RELEASE_TAG -or $release.draft -or $release.immutable) { throw 'Expected a mutable published release.' }
           $keep = @("Markit-$version-Windows-x64-Setup.exe", "Markit-$version-Windows-x64.zip", "Markit-$version-macOS-x64.dmg", "Markit-$version-Linux-x64.AppImage", "Markit-$version-Linux-x64.deb", "Markit-$version-Linux-x64.rpm", "Markit-$version-Linux-x64.tar.gz")
-          $remove = @("Markit-$version-Windows-Source.zip", 'README.zh-CN.md', 'SHA256SUMS.txt', 'THIRD_PARTY_LICENSES.txt', 'THIRD_PARTY_DEPENDENCIES.json', 'ThirdPartyNotices.md')
+          $remove = @("Markit-$version-Windows-Source.zip", 'README.zh-CN.md', 'THIRD_PARTY_LICENSES.txt', 'THIRD_PARTY_DEPENDENCIES.json', 'ThirdPartyNotices.md')
           $assets = @(gh api --paginate --slurp "repos/$env:GH_REPO/releases/$($release.id)/assets" | ConvertFrom-Json | ForEach-Object { $_ })
           if ($LASTEXITCODE -ne 0) { throw 'Could not list release assets.' }
           $assets = @($assets | ForEach-Object { $_ })
           $pluginAssets = @($assets | Where-Object { $_.name -cmatch '^Markit-citations-\d+\.\d+\.\d+\.markit-plugin$' })
           if ($pluginAssets.Count -ne 1) { throw 'Expected exactly one citations plugin package.' }
           $keep += $pluginAssets[0].name
+          $checksumAssets = @($assets | Where-Object name -CEQ 'SHA256SUMS.txt')
+          if ($checksumAssets.Count -gt 1) { throw 'Expected at most one SHA256SUMS.txt asset.' }
+          if ($checksumAssets.Count -eq 1) { $keep += 'SHA256SUMS.txt' }
           foreach ($name in $keep) {
             $asset = @($assets | Where-Object name -CEQ $name)
             if ($asset.Count -ne 1 -or $asset[0].size -le 0 -or $asset[0].state -ne 'uploaded') { throw "Required download is missing: $name" }
