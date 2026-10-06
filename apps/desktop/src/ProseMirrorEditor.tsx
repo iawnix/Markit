@@ -16,7 +16,7 @@ import { markdownParser, safeLinkHref, serializeMarkdownLike } from '../../../pa
 
 export interface LiveEditorHandle {
   focus(): void;
-  insertMarkdown(markdown: string): void;
+  insertMarkdown?: (markdown: string) => void;
 }
 
 interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; linkPrompt?: string; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
@@ -181,14 +181,14 @@ function mathDecorations(state: EditorState): DecorationSet {
 }
 
 function deleteEmptyHeading(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
-  const cursor = state.selection.$cursor;
+  const cursor = (state.selection as TextSelection).$cursor;
   if (!cursor || cursor.parent.type !== state.schema.nodes.heading || cursor.parent.content.size > 0) return false;
   if (dispatch) dispatch(state.tr.setBlockType(cursor.before(), cursor.after(), state.schema.nodes.paragraph).scrollIntoView());
   return true;
 }
 
 function exitCodeOnEmptyLine(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
-  const cursor = state.selection.$cursor;
+  const cursor = (state.selection as TextSelection).$cursor;
   if (!cursor || cursor.parent.type !== state.schema.nodes.code_block || cursor.parentOffset !== cursor.parent.content.size) return false;
   if (!cursor.parent.textContent.endsWith('\n')) return false;
   return exitCode(state, dispatch);
