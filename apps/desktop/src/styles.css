@@ -207,6 +207,11 @@ button:focus-visible { outline: 1px solid #b9c5d0; outline-offset: 2px; }
 .link-editor-field input:focus { border-color: var(--text-muted); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-muted) 16%, transparent); }
 .link-editor-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 18px 18px; }
 .link-editor-actions button { margin: 0; }
+.error-toast { position: fixed; right: 18px; bottom: 48px; z-index: 20; display: flex; align-items: flex-start; gap: 12px; width: min(440px, calc(100vw - 36px)); padding: 12px 13px 12px 15px; border: 1px solid #8d5b5b; border-radius: 4px; background: var(--modal-background); box-shadow: 0 12px 34px #11131555; color: var(--text); }
+.error-toast-content { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.error-toast-content strong { color: #c97979; font-size: 12px; font-weight: 600; }
+.error-toast-content span { overflow-wrap: anywhere; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.error-toast > .icon-button { flex: 0 0 auto; margin-left: auto; }
 .settings-modal header { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-bottom: 1px solid var(--rule); }
 .settings-modal h2 { margin: 0; color: var(--heading); font-size: 16px; font-weight: 500; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 18px; color: var(--text-muted); font-size: 13px; }

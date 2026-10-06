@@ -99,6 +99,8 @@ export default function App() {
   const saveRef = useRef<() => Promise<void>>(async () => undefined);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>(loadPlugins);
   const [pluginError, setPluginError] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const errorTimerRef = useRef<number | null>(null);
   const [pluginCommands, setPluginCommands] = useState<PluginCommandContribution[]>([]);
   const [pluginPanels, setPluginPanels] = useState<PluginPanelContribution[]>([]);
   const [selectedPluginPanel, setSelectedPluginPanel] = useState<PluginPanelContribution | null>(null);
@@ -109,6 +111,22 @@ export default function App() {
     return panel?.content?.citations || {};
   }, [pluginPanels]);
   const t = (key: Parameters<typeof message>[1]) => message(locale, key);
+
+  function reportError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    setErrorMessage(message);
+    if (errorTimerRef.current !== null) window.clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = window.setTimeout(() => {
+      errorTimerRef.current = null;
+      setErrorMessage('');
+    }, 7000);
+  }
+
+  function dismissError() {
+    if (errorTimerRef.current !== null) window.clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = null;
+    setErrorMessage('');
+  }
 
   function requestLinkEditor(href: string): Promise<string | null> {
     setLinkEditorValue(href || 'https://');
@@ -232,6 +250,9 @@ export default function App() {
     document.documentElement.style.setProperty('--editor-font-size', `${editorFontSize}px`);
   }, [editorFont, editorFontSize]);
   useEffect(() => { localStorage.setItem('markit.sidebarWidth', String(sidebarWidth)); }, [sidebarWidth]);
+  useEffect(() => () => {
+    if (errorTimerRef.current !== null) window.clearTimeout(errorTimerRef.current);
+  }, []);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -291,14 +312,14 @@ export default function App() {
       setDocuments(current => current.some(item => item.path === path) ? current : [...current, document]);
       setActiveId(document.id);
       setWorkspace(path.replace(/[\\/][^\\/]+$/, '') || path);
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   async function chooseDocument() {
     try {
       const selection = await open({ multiple: false, directory: false, filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd', 'txt'] }] });
       if (typeof selection === 'string') await openPath(selection);
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   async function chooseWorkspace() {
@@ -307,7 +328,7 @@ export default function App() {
       if (typeof selection !== 'string') return;
       setWorkspace(selection);
       setEntries(await listDirectory(selection));
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   function newDocument() {
@@ -329,7 +350,7 @@ export default function App() {
       }
       const revision = await saveDocument(path, active.source, active.path ? active.revision : null, active.bom, active.lineEnding);
       setDocuments(current => current.map(item => item.id === active.id ? { ...item, path, title: titleFor(path, locale), savedSource: item.source, dirty: false, revision, externalChange: false } : item));
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   saveRef.current = save;
@@ -339,7 +360,7 @@ export default function App() {
     try {
       const fresh = await readDocument(active.path);
       setDocuments(current => current.map(item => item.id === active.id ? { ...fresh, id: item.id, mode: item.mode, externalChange: false } : item));
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   async function exportDocument() {
@@ -353,7 +374,7 @@ export default function App() {
       }
       const selected = await saveFile({ defaultPath: defaultName, filters: [{ name: 'HTML', extensions: ['html', 'htm'] }] });
       if (typeof selected === 'string') await writeHtml(selected, html);
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   function updateSource(source: string) {
@@ -396,7 +417,7 @@ export default function App() {
       }
       const source = active.source.slice(0, position) + (position && !/\n$/.test(active.source.slice(0, position)) ? '\n' : '') + insertion + '\n' + active.source.slice(position);
       updateSource(source);
-    } catch (error) { window.alert(String(error)); }
+    } catch (error) { reportError(error); }
   }
 
   function persistPlugins(next: InstalledPlugin[]) {
@@ -720,5 +741,6 @@ export default function App() {
     </div>
     {showSettings && <div className="modal-backdrop" onClick={() => setShowSettings(false)}><section className="settings-modal" onClick={event => event.stopPropagation()}><header><h2>{t('settings')}</h2><button className="icon-button" title="Close" aria-label="Close" onClick={() => setShowSettings(false)}><X size={18} /></button></header><div className="settings-row"><span>{t('language')}</span><button className="secondary-command" onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}>{locale === 'zh-CN' ? t('chinese') : t('english')}</button></div><div className="settings-row"><span>{t('theme')}</span><select className="settings-select" value={theme} onChange={event => setTheme(event.target.value as Theme)}><option value="system">{t('themeSystem')}</option><option value="light">{t('themeLight')}</option><option value="dark">{t('themeDark')}</option></select></div><div className="settings-section editor-settings"><div className="settings-section-heading"><strong>{t('editorAppearance')}</strong></div><label className="settings-control"><span>{t('editorFont')}</span><select className="settings-select" value={editorFont} onChange={event => setEditorFont(event.target.value as EditorFont)}><option value="system">{t('fontSystem')}</option><option value="noto">{t('fontNoto')}</option><option value="sarasa">{t('fontSarasa')}</option><option value="jetbrains">{t('fontJetBrains')}</option></select></label><label className="settings-control"><span>{t('editorFontSize')}</span><span className="settings-range"><input type="range" min="12" max="24" step="1" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} /><output>{editorFontSize}px</output></span></label></div><div className="settings-section"><div className="settings-section-heading"><strong>{t('plugins')}</strong><button className="secondary-command" onClick={() => void choosePlugin()}><Upload size={14} />{t('installPlugin')}</button><input ref={pluginInputRef} hidden type="file" accept=".markit-plugin" onChange={event => { const file = event.target.files?.[0]; if (file) void file.arrayBuffer().then(bytes => installPlugin(new Uint8Array(bytes))); event.currentTarget.value = ''; }} /></div>{pluginError && <p className="plugin-error">{t('pluginInstallError')}: {pluginError}</p>}{plugins.length ? <div className="plugin-list">{plugins.map(plugin => <article className="plugin-row" key={plugin.manifest.id}><div className="plugin-info"><strong>{plugin.manifest.name}</strong><span>{plugin.manifest.id} · v{plugin.manifest.version}</span><small>{t('pluginPermissions')}: {plugin.manifest.permissions.length ? plugin.manifest.permissions.join(', ') : 'none'}</small></div><div className="plugin-actions">{(plugin.integrityVerified || plugin.signaturePresent) && <span title={plugin.integrityVerified ? t('pluginIntegrity') : t('pluginUnsigned')}><ShieldCheck size={14} /></span>}<button className="icon-button" title={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} aria-label={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} onClick={() => togglePlugin(plugin)}><span className={`plugin-toggle ${plugin.enabled ? 'enabled' : ''}`} /></button><button className="icon-button" title={t('removePlugin')} aria-label={t('removePlugin')} onClick={() => removePlugin(plugin)}><Trash2 size={14} /></button></div></article>)}</div> : <p className="empty-sidebar">{t('noPlugins')}</p>}</div></section></div>}
     {linkEditor && <div className="modal-backdrop" onClick={() => resolveLinkEditor(null)}><section className="link-editor-modal" role="dialog" aria-modal="true" aria-labelledby="link-editor-title" onClick={event => event.stopPropagation()}><header><h2 id="link-editor-title">{t('linkEditorTitle')}</h2><button className="icon-button" title={t('cancel')} aria-label={t('cancel')} onClick={() => resolveLinkEditor(null)}><X size={18} /></button></header><label className="link-editor-field"><span>{t('linkURL')}</span><input autoFocus value={linkEditorValue} onChange={event => setLinkEditorValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); resolveLinkEditor(linkEditorValue); } if (event.key === 'Escape') { event.preventDefault(); resolveLinkEditor(null); } }} /></label><footer className="link-editor-actions"><button className="secondary-command" onClick={() => resolveLinkEditor(null)}>{t('cancel')}</button><button className="primary-command" onClick={() => resolveLinkEditor(linkEditorValue)}>{t('apply')}</button></footer></section></div>}
+    {errorMessage && <div className="error-toast" role="alert"><div className="error-toast-content"><strong>{t('errorTitle')}</strong><span>{errorMessage}</span></div><button className="icon-button" title={t('closeError')} aria-label={t('closeError')} onClick={dismissError}><X size={16} /></button></div>}
   </div>;
 }
