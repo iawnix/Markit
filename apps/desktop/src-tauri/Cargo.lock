@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "markit"
-version = "0.4.19"
+version = "0.4.20"
 dependencies = [
  "image",
  "serde",

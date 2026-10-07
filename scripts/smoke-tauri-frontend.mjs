@@ -330,6 +330,25 @@ try {
   await page.locator('.empty-state').waitFor();
   checks.push('dirty document close confirmation');
 
+  await page.locator('.menu-trigger').click();
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const readingWidth = page.getByRole('slider', { name: '阅读宽度' });
+  if (await readingWidth.getAttribute('value') !== '1120') throw new Error('The default reading width should be 1120px.');
+  await readingWidth.focus();
+  await page.keyboard.press('End');
+  const readingWidthValue = await readingWidth.getAttribute('value');
+  const readingWidthStored = await page.evaluate(() => localStorage.getItem('markit.editorWidth'));
+  const readingWidthCss = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--editor-width').trim());
+  if (readingWidthValue !== '1600' || readingWidthStored !== '1600' || readingWidthCss !== '1600px') {
+    throw new Error(`Reading width did not update and persist: value=${readingWidthValue}, stored=${readingWidthStored}, css=${readingWidthCss}`);
+  }
+  await page.locator('.settings-modal').getByRole('button', { name: 'Close' }).click();
+  await page.locator('.empty-state .primary-command').click();
+  await page.locator('.status-mode-option[aria-label="预览"]').click();
+  const liveColumnWidth = await page.locator('.live-editor-column').evaluate(element => element.getBoundingClientRect().width);
+  if (liveColumnWidth < 900) throw new Error(`The wider reading-width setting did not expand the live editor: ${liveColumnWidth}px`);
+  checks.push('reading width setting updates, applies and persists');
+
   if (errors.length) throw new Error(`Frontend console errors:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'passed', checks }));
 } catch (error) {
