@@ -3,7 +3,7 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
 import { inputRules } from 'prosemirror-inputrules';
 import type { EditorView } from 'prosemirror-view';
-import { createLiveInputRules } from '../apps/desktop/src/ProseMirrorEditor';
+import { createLiveInputRules, markdownTableOnEnter } from '../apps/desktop/src/ProseMirrorEditor';
 import { markdownParser, serializeMarkdown } from '../packages/editor/src/prosemirror';
 
 function applyInput(before: string, text: string) {
@@ -56,5 +56,33 @@ describe('live Markdown input rules', () => {
     const combined = applyInput('***both**', '*');
     expect(combined.handled).toBe(true);
     expect(combined.state.doc.firstChild?.firstChild?.marks.map(mark => mark.type.name)).toEqual(['em', 'strong']);
+
+    const fiveStar = applyInput('*****both****', '*');
+    expect(fiveStar.handled).toBe(true);
+    expect(fiveStar.state.doc.firstChild?.firstChild?.marks.map(mark => mark.type.name)).toEqual(['em', 'strong']);
+  });
+
+  it('supports longer tilde runs for strikethrough and preserves Markdown source', () => {
+    const result = applyInput('~~~~removed~~~', '~');
+    expect(result.handled).toBe(true);
+    expect(result.state.doc.firstChild?.firstChild?.marks.map(mark => mark.type.name)).toEqual(['strike']);
+    expect(serializeMarkdown(result.state.doc)).toBe('~~removed~~');
+  });
+
+  it('converts a typed header and separator into an editable table', () => {
+    const schema = markdownParser.schema;
+    const header = schema.nodes.paragraph.create(null, schema.text('| Name | Value |'));
+    const separator = schema.nodes.paragraph.create(null, schema.text('| :--- | ---: |'));
+    const doc = schema.topNodeType.create(null, [header, separator]);
+    let state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, doc.content.size - 1) });
+
+    expect(markdownTableOnEnter(state, transaction => { state = state.apply(transaction); })).toBe(true);
+    expect(state.doc.childCount).toBe(1);
+    expect(state.doc.firstChild?.type).toBe(schema.nodes.table);
+    expect(state.doc.firstChild?.childCount).toBe(2);
+    expect(state.doc.firstChild?.child(0).child(0).attrs.align).toBe('left');
+    expect(state.doc.firstChild?.child(0).child(1).attrs.align).toBe('right');
+    expect(state.selection.$from.parent.type).toBe(schema.nodes.paragraph);
+    expect(serializeMarkdown(state.doc)).toContain('| Name | Value |');
   });
 });

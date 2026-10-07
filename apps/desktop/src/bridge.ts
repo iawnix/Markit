@@ -1,7 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type { DirectoryEntry, DocumentSnapshot, FileRevision, ImageInput, OutlineEntry, RecoveryDocument } from './contracts';
 
 export const isTauriRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+export async function openExternalUrl(value: string): Promise<void> {
+  const url = new URL(value);
+  if (!['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) throw new Error('Unsupported link protocol.');
+  if (isTauriRuntime) await openUrl(url.href);
+  else window.open(url.href, '_blank', 'noopener,noreferrer');
+}
 
 function fallback<T>(value: T): Promise<T> {
   return Promise.resolve(value);

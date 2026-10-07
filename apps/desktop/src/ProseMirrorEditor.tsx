@@ -242,6 +242,65 @@ function horizontalRuleOnEnter(state: EditorState, dispatch?: (transaction: Tran
   return true;
 }
 
+function tableRowCells(source: string): string[] | null {
+  const line = source.trim();
+  if (!line.includes('|')) return null;
+  const cells: string[] = [];
+  let cell = '';
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) {
+      cell += `\\${character}`;
+      escaped = false;
+    } else if (character === '\\') {
+      escaped = true;
+    } else if (character === '|') {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += character;
+    }
+  }
+  if (escaped) cell += '\\';
+  cells.push(cell.trim());
+  if (line.startsWith('|')) cells.shift();
+  if (line.endsWith('|') && !line.endsWith('\\|')) cells.pop();
+  return cells.length ? cells : null;
+}
+
+export function markdownTableOnEnter(state: EditorState, dispatch?: (transaction: Transaction) => void): boolean {
+  const cursor = (state.selection as TextSelection).$cursor;
+  if (!cursor || cursor.parent.type !== state.schema.nodes.paragraph || cursor.parentOffset !== cursor.parent.content.size) return false;
+  const alignment = tableRowCells(cursor.parent.textContent);
+  if (!alignment || !alignment.length || !alignment.every(cell => /^:?-{3,}:?$/.test(cell))) return false;
+
+  const currentStart = cursor.before();
+  const previous = state.doc.resolve(currentStart).nodeBefore;
+  if (!previous || previous.type !== state.schema.nodes.paragraph) return false;
+  const header = tableRowCells(previous.textContent);
+  if (!header || header.length !== alignment.length) return false;
+
+  const schema = state.schema;
+  const makeCell = (type: typeof schema.nodes.table_header | typeof schema.nodes.table_cell, source: string, align: string | null) => {
+    const content = markdownParser.parse(source).content;
+    return type.create({ align }, content);
+  };
+  const headerCells = header.map((source, index) => {
+    const marker = alignment[index];
+    const align = marker.startsWith(':') && marker.endsWith(':') ? 'center' : marker.startsWith(':') ? 'left' : marker.endsWith(':') ? 'right' : null;
+    return makeCell(schema.nodes.table_header, source, align);
+  });
+  const headerRow = schema.nodes.table_row.create(null, headerCells);
+  const bodyRow = schema.nodes.table_row.create(null, header.map((_source, index) => makeCell(schema.nodes.table_cell, '', headerCells[index].attrs.align)));
+  const table = schema.nodes.table.create(null, [headerRow, bodyRow]);
+  const tableStart = currentStart - previous.nodeSize;
+  const transaction = state.tr.replaceWith(tableStart, cursor.after(), table);
+  const bodyCellPosition = tableStart + 1 + headerRow.nodeSize + 2;
+  if (dispatch) dispatch(transaction.setSelection(TextSelection.near(transaction.doc.resolve(bodyCellPosition))).scrollIntoView());
+  return true;
+}
+
 export function createLiveInputRules(schema: typeof markdownParser['schema']) {
   const heading = schema.nodes.heading;
   const codeBlock = schema.nodes.code_block;
@@ -261,15 +320,16 @@ export function createLiveInputRules(schema: typeof markdownParser['schema']) {
     wrappingInputRule(/^\s*([-+*])\s$/, bulletList),
     wrappingInputRule(/^\s*(\d+)\.\s$/, orderedList, match => ({ order: Number(match[1]) })),
     // Longer delimiter runs must be checked before their shorter equivalents.
+    markInputRule(/(^|[^*])(\*{5})(?=\S)([^*]+?\S)\2(?!\*)$/, [strong, em]),
     markInputRule(/(^|[^*])(\*{4})(?=\S)([^*]+?\S)\2(?!\*)$/, strong),
     markInputRule(/(^|[^*])(\*{3})(?=\S)([^*]+?\S)\2(?!\*)$/, [strong, em]),
     markInputRule(/(^|[^*])(\*{2})(?=\S)([^*]+?\S)\2(?!\*)$/, strong),
     markInputRule(/(^|[^\w_])(__)(?=\S)([^_]+?\S)\2(?!_)$/, strong),
     markInputRule(/(^|[^*])(\*)(?=\S)([^*]+?\S)\2(?!\*)$/, em),
     markInputRule(/(^|[^\w_])(_)(?=\S)([^_]+?\S)\2(?!_)$/, em),
-    markInputRule(/(^|[^`])(`+)(?=\S)([^`]+?\S)\2$/, code),
+    markInputRule(/(^|[^`])(`+)(?=\S)([^\n]*?\S)\2$/, code),
     linkInputRule(link),
-    markInputRule(/(^|[^\w])(~~)(?=\S)([^~]+?\S)\2$/, strike),
+    markInputRule(/(^|[^~])(~~+)(?=\S)([^~]+?\S)\2$/, strike),
     markInputRule(/(^|[^\w])(==)(?=\S)([^=]+?\S)\2$/, highlight),
   ];
 }
@@ -344,7 +404,7 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
           tableEditing(),
           keymap({
             ...baseKeymap,
-            Enter: chainCommands(horizontalRuleOnEnter, exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
+            Enter: chainCommands(markdownTableOnEnter, horizontalRuleOnEnter, exitCodeOnEmptyLine, newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock),
             Backspace: chainCommands(undoInputRule, deleteEmptyHeading, baseKeymap.Backspace),
             Tab: tabThroughTable,
             'Shift-Tab': goToNextCell(-1),
