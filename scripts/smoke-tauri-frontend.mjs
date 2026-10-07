@@ -59,6 +59,17 @@ try {
   await sourceMode.click();
   const sourceEditor = page.locator('.source-editor-column .cm-content');
   await sourceEditor.waitFor();
+  const sourceScrollLayout = await page.locator('.editor-scroll').evaluate(element => {
+    const editor = element.querySelector('.source-editor-column .cm-scroller');
+    if (!editor) throw new Error('The source editor scroll viewport was not found.');
+    const outer = element.getBoundingClientRect();
+    const inner = editor.getBoundingClientRect();
+    return { outerHeight: outer.height, innerHeight: inner.height, topOffset: inner.top - outer.top, outerOverflow: getComputedStyle(element).overflowY };
+  });
+  if (sourceScrollLayout.outerOverflow !== 'hidden' || Math.abs(sourceScrollLayout.outerHeight - sourceScrollLayout.innerHeight) > 2 || Math.abs(sourceScrollLayout.topOffset) > 1) {
+    throw new Error(`Source editor should use one full-panel scroll viewport: ${JSON.stringify(sourceScrollLayout)}`);
+  }
+  checks.push('source editor scroll viewport fills the full editing panel');
   const source = '# Markit\n\n## Writing\n\nSearchable Markit text.\n\n**Bold** and `code`. Inline $x^2$ math.\n\n- [ ] Pending task\n\n![pixel](data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=)\n\n$$y = x + 1$$\n\n```javascript\nconst ready = true;\n```\n';
   await sourceEditor.click();
   await page.keyboard.press('Control+A');
@@ -347,7 +358,10 @@ try {
   await page.locator('.status-mode-option[aria-label="预览"]').click();
   const liveColumnWidth = await page.locator('.live-editor-column').evaluate(element => element.getBoundingClientRect().width);
   if (liveColumnWidth < 900) throw new Error(`The wider reading-width setting did not expand the live editor: ${liveColumnWidth}px`);
+  const liveScrollMode = await page.locator('.live-editor-column .cm-scroller').evaluate(element => getComputedStyle(element).overflowY);
+  if (liveScrollMode !== 'visible') throw new Error(`Live preview should flow with the main document instead of scrolling in an inner viewport: ${liveScrollMode}`);
   checks.push('reading width setting updates, applies and persists');
+  checks.push('live preview uses the main document scroll instead of an inner editor viewport');
 
   if (errors.length) throw new Error(`Frontend console errors:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'passed', checks }));
