@@ -4,7 +4,7 @@ import type { Transaction } from 'prosemirror-state';
 import { inputRules } from 'prosemirror-inputrules';
 import type { EditorView } from 'prosemirror-view';
 import { createLiveInputRules } from '../apps/desktop/src/ProseMirrorEditor';
-import { markdownParser } from '../packages/editor/src/prosemirror';
+import { markdownParser, serializeMarkdown } from '../packages/editor/src/prosemirror';
 
 function applyInput(before: string, text: string) {
   const schema = markdownParser.schema;
@@ -33,6 +33,19 @@ describe('live Markdown input rules', () => {
     expect(result.handled).toBe(true);
     expect(result.state.doc.firstChild?.firstChild?.marks.map(mark => mark.type.name)).toEqual(['code']);
     expect(result.state.doc.textContent).toBe('code');
+    expect(serializeMarkdown(result.state.doc)).toBe('`code`');
+  });
+
+  it('keeps formatting when delimiters are typed directly after existing text', () => {
+    const code = applyInput('prefix`test01', '`');
+    expect(code.handled).toBe(true);
+    expect(code.state.doc.firstChild?.child(1).marks.map(mark => mark.type.name)).toEqual(['code']);
+    expect(serializeMarkdown(code.state.doc)).toBe('prefix`test01`');
+
+    const bold = applyInput('prefix**test04*', '*');
+    expect(bold.handled).toBe(true);
+    expect(bold.state.doc.firstChild?.child(1).marks.map(mark => mark.type.name)).toEqual(['strong']);
+    expect(serializeMarkdown(bold.state.doc)).toBe('prefix**test04**');
   });
 
   it('supports four-star and three-star emphasis delimiters', () => {

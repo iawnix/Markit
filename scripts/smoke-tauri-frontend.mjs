@@ -97,6 +97,13 @@ try {
   await page.keyboard.press('Enter');
   await page.keyboard.type('`typed code`');
   await page.locator('.pm-editor code', { hasText: 'typed code' }).waitFor();
+  await sourceMode.click();
+  const formattedSource = await sourceEditor.innerText();
+  if (!formattedSource.includes('**typed bold**') || !formattedSource.includes('`typed code`')) {
+    throw new Error(`Live formatting was not serialized to Markdown correctly: ${formattedSource}`);
+  }
+  await previewMode.click();
+  await liveEditor.click();
   checks.push('live code fence and inline formatting input');
 
   await page.keyboard.press('Control+A');
