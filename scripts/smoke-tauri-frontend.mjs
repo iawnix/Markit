@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { checkEditorColors } from './check-editor-colors.mjs';
 import { checkLiveSelection, checkLivePointer } from './check-live-selection.mjs';
 
 const host = '127.0.0.1';
@@ -378,6 +379,9 @@ try {
 
   await checkLivePointer(page);
   checks.push('precise mouse placement around all heading levels, inline formatting and long links; drag and double-click selection');
+
+  await checkEditorColors(page);
+  checks.push('light, dark and system syntax contrast; readable selection/search/print colors; appearance changes preserve source and history');
 
   if (errors.length) throw new Error(`Frontend console errors:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'passed', checks }));

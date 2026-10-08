@@ -1,11 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { markdown, markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
-import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { syntaxHighlighting } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { SearchQuery, search, setSearchQuery } from '@codemirror/search';
 import { Compartment, EditorState, Transaction, type Extension, type StateCommand } from '@codemirror/state';
 import { Decoration, EditorView, keymap, MatchDecorator, ViewPlugin } from '@codemirror/view';
 import { createLivePreviewExtension, externalLinkAt, moveToTableCell, pasteTableCells, refreshLivePreview } from './live-preview';
+import { editorHighlightStyle } from './editor-highlighting';
 import { codeLanguageForFence } from './markdown-code-languages';
 import { openExternalUrl, registerAsset } from './bridge';
 
@@ -128,7 +129,7 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
         ...historyKeymap,
         indentWithTab,
       ]),
-      syntaxHighlighting(defaultHighlightStyle),
+      syntaxHighlighting(editorHighlightStyle),
       search(),
       previewCompartment.of(mode === 'live' ? createLivePreviewExtension(imageUrlsRef.current, documentPath) : []),
       ViewPlugin.fromClass(class {
