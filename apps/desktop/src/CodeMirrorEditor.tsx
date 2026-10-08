@@ -85,7 +85,7 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
     },
   }), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!host.current) return;
     const previewCompartment = previewCompartmentRef.current;
     extensionsRef.current = [
@@ -130,7 +130,7 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
       ]),
       syntaxHighlighting(defaultHighlightStyle),
       search(),
-      previewCompartment.of([]),
+      previewCompartment.of(mode === 'live' ? createLivePreviewExtension(imageUrlsRef.current, documentPath) : []),
       ViewPlugin.fromClass(class {
         decorations = Decoration.none;
         query = '';
@@ -196,7 +196,13 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
     });
     statesRef.current.set(documentId, editor.state);
     viewRef.current = editor;
-    return () => { editor.destroy(); viewRef.current = null; };
+    currentModeRef.current = mode;
+    currentDocumentPathRef.current = documentPath;
+    return () => {
+      editor.destroy();
+      viewRef.current = null;
+      currentModeRef.current = null;
+    };
   }, []);
 
   useLayoutEffect(() => {

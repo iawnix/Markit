@@ -54,6 +54,13 @@ try {
   await page.locator('.statusbar').waitFor();
   checks.push('empty startup and status bar');
 
+  const initialLiveContent = page.locator('.live-editor-column .cm-content');
+  await initialLiveContent.waitFor();
+  await initialLiveContent.click();
+  await page.keyboard.insertText('**First preview**');
+  await page.locator('.cm-live-strong', { hasText: 'First preview' }).waitFor();
+  checks.push('live preview decorations initialize on first document open');
+
   const sourceMode = page.locator('.status-mode-option[aria-label="源码"]');
   const previewMode = page.locator('.status-mode-option[aria-label="预览"]');
   await sourceMode.click();
