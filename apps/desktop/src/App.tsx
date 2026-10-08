@@ -823,10 +823,6 @@ export default function App() {
     setPendingClose(null);
     finishCloseDocument(id);
   }
-  const dragWindow = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0 || !isTauriRuntime) return;
-    void getCurrentWindow().startDragging().catch(() => undefined);
-  };
   const minimizeWindow = () => { if (isTauriRuntime) void getCurrentWindow().minimize().catch(() => undefined); };
   const toggleMaximizeWindow = async () => {
     if (!isTauriRuntime) return;
@@ -863,17 +859,18 @@ export default function App() {
   const sidebarIsVisible = !focusMode && !sidebarCollapsed;
 
   return <div className={`markit-app theme-${theme} ${focusMode ? 'focus-mode' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${sidebarResizing ? 'sidebar-resizing' : ''}`} style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}>
-    <header className="titlebar">
-      <div className="titlebar-left" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()}>
-        <button className="menu-trigger" title={t('menu')} aria-label={t('menu')} onPointerDown={event => event.stopPropagation()} onClick={() => setMenuOpen(current => !current)}><Menu size={16} /></button>
+    {/* Tauri owns dragging and platform-specific double-click behavior for the whole titlebar. */}
+    <header className="titlebar" data-tauri-drag-region="deep">
+      <div className="titlebar-left">
+        <button className="menu-trigger" data-tauri-drag-region="false" title={t('menu')} aria-label={t('menu')} onClick={() => setMenuOpen(current => !current)}><Menu size={16} /></button>
         <div className="brand" title="Markit"><strong>Markit</strong></div>
       </div>
-      <div className="titlebar-title" data-tauri-drag-region="true" onPointerDown={dragWindow} onDoubleClick={() => void toggleMaximizeWindow()} title={active ? titleFor(active.path, locale) : 'Markit'}>
+      <div className="titlebar-title" title={active ? titleFor(active.path, locale) : 'Markit'}>
         <span className="titlebar-document">{active ? titleFor(active.path, locale) : 'Markit'}</span>
         {active && <span className={`titlebar-status ${active.dirty ? 'dirty' : ''}`} aria-label={active.dirty ? t('unsaved') : t('saved')} />}
       </div>
       <div className="titlebar-actions">
-        <div className="window-controls" aria-label="Window controls">
+        <div className="window-controls" data-tauri-drag-region="false" aria-label="Window controls">
           <button className="window-control" title="Minimize" aria-label="Minimize" onClick={minimizeWindow}><Minus size={15} /></button>
           <button className="window-control" title="Maximize" aria-label="Maximize" onClick={() => void toggleMaximizeWindow()}><Square size={13} /></button>
           <button className="window-control window-control-close" title="Close" aria-label="Close" onClick={closeWindow}><X size={15} /></button>
