@@ -1,13 +1,15 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { checkLiveSelection, checkLivePointer } from './check-live-selection.mjs';
 
 const host = '127.0.0.1';
 const port = 5174;
 const url = `http://${host}:${port}/`;
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const server = spawn(npmCommand, ['run', 'dev', '--prefix', 'apps/desktop', '--', '--host', host], {
+// Start Vite directly so cleanup terminates the server, not just its npm parent.
+const server = spawn(process.execPath, [fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url)), '--config', 'vite.config.ts', '--host', host], {
+  cwd: fileURLToPath(new URL('../apps/desktop', import.meta.url)),
   stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env, CI: '1' },
 });
