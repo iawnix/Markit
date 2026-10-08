@@ -153,7 +153,7 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
       EditorView.contentAttributes.of({ 'aria-label': 'Markdown editor', spellcheck: 'false', autocapitalize: 'off' }),
       EditorView.domEventHandlers({
         click(event, view) {
-          if (currentModeRef.current !== 'live' || !(event.target instanceof Element) || !event.target.closest('.cm-live-link')) return false;
+          if (currentModeRef.current !== 'live' || event.button !== 0 || (!event.ctrlKey && !event.metaKey) || !(event.target instanceof Element) || !event.target.closest('.cm-live-link')) return false;
           const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
           const href = position === null ? undefined : externalLinkAt(view.state, position);
           if (!href) return false;

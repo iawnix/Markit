@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { checkLiveSelection, checkLivePointer } from './check-live-selection.mjs';
 
 const host = '127.0.0.1';
 const port = 5174;
@@ -146,9 +147,9 @@ try {
   await page.keyboard.press('Enter');
   await page.keyboard.type('[typed link](https://example.com)');
   await page.locator('.cm-live-link', { hasText: 'typed link' }).waitFor();
-  await page.locator('.cm-live-link', { hasText: 'typed link' }).click();
+  await page.locator('.cm-live-link', { hasText: 'typed link' }).click({ modifiers: ['Control'] });
   await page.waitForFunction(() => window.openedExternalUrls?.includes('https://example.com/'));
-  checks.push('live preview opens safe external links');
+  checks.push('live preview opens safe external links with Ctrl+click');
   await sourceMode.click();
   const formattedSource = await sourceEditor.innerText();
   if (formattedSource !== '**typed bold**\n*typed italic*\n`typed code`\n~~typed strike~~\n[typed link](https://example.com)') {
@@ -369,6 +370,12 @@ try {
   if (liveScrollMode !== 'visible') throw new Error(`Live preview should flow with the main document instead of scrolling in an inner viewport: ${liveScrollMode}`);
   checks.push('reading width setting updates, applies and persists');
   checks.push('live preview uses the main document scroll instead of an inner editor viewport');
+
+  await checkLiveSelection(page);
+  checks.push('stable forward, backward and vertical keyboard selection; hidden syntax navigation; source editing and undo');
+
+  await checkLivePointer(page);
+  checks.push('precise mouse placement around all heading levels, inline formatting and long links; drag and double-click selection');
 
   if (errors.length) throw new Error(`Frontend console errors:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'passed', checks }));

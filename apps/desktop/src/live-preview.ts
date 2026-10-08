@@ -1,9 +1,9 @@
 import { syntaxTree } from '@codemirror/language';
-import { EditorState, StateEffect, type Range, type StateCommand } from '@codemirror/state';
+import { EditorState, StateEffect, type EditorSelection, type Range, type StateCommand } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
 import type { SyntaxNodeRef } from '@lezer/common';
 import 'katex/dist/katex.min.css';
-import { Decoration, ViewPlugin, WidgetType, type DecorationSet, type EditorView } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { message } from './i18n';
 
 const markerNames = new Set(['EmphasisMark', 'StrikethroughMark', 'CodeMark', 'HeaderMark', 'QuoteMark', 'LinkMark']);
@@ -676,17 +676,17 @@ function lineRange(state: EditorState, from: number, to: number): [number, numbe
   return [start, end];
 }
 
-export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<string, string>, documentPath: string | null): DecorationSet {
+export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<string, string>, documentPath: string | null, activeSelection = view.state.selection): DecorationSet {
   const { state } = view;
-  const cursorLine = state.doc.lineAt(state.selection.main.head).number;
-  const { from: selectionFrom, to: selectionTo } = state.selection.main;
+  const cursorLine = state.doc.lineAt(activeSelection.main.head).number;
+  const { from: selectionFrom, to: selectionTo } = activeSelection.main;
   const lineIsActive = (lineNumber: number) => {
     if (lineNumber === cursorLine) return true;
     const line = state.doc.line(lineNumber);
     return selectionFrom < line.to && selectionTo > line.from;
   };
   const rangeIsActive = (from: number, to: number) =>
-    (state.selection.main.head >= from && state.selection.main.head <= to)
+    (activeSelection.main.head >= from && activeSelection.main.head <= to)
     || (selectionFrom < to && selectionTo > from);
   const inlineSyntaxIsActive = (node: SyntaxNodeRef) => {
     let parent = node.node.parent;
@@ -713,7 +713,7 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
     if (from < to) ranges.push(Decoration.mark({ class: className }).range(from, to));
   };
   const hide = (from: number, to: number) => {
-    if (from < to) ranges.push(Decoration.replace({}).range(from, to));
+    if (from < to) ranges.push(Decoration.replace({ atomic: true }).range(from, to));
   };
 
   const firstVisibleLine = state.doc.lineAt(view.viewport.from).number;
@@ -747,7 +747,7 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
         if (model) {
           for (let child = node.node.firstChild; child; child = child.nextSibling) {
             if (child.name === 'TableHeader') {
-              ranges.push(Decoration.replace({ widget: new TableWidget(model) }).range(child.from, child.to));
+              ranges.push(Decoration.replace({ atomic: true, widget: new TableWidget(model) }).range(child.from, child.to));
             } else if (child.name === 'TableRow') {
               hide(child.from, child.to);
               addLine(child.from, child.to, 'cm-live-table-hidden-row');
@@ -767,7 +767,7 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
         if (source) {
           const decoded = (() => { try { return decodeURIComponent(source); } catch { return source; } })();
           const resolved = /^(?:https?:|data:|markit-asset:)/i.test(decoded) ? decoded : documentPath ? imageUrls.get(`${documentPath}\0${decoded}`) : undefined;
-          if (resolved) ranges.push(Decoration.replace({ widget: new ImageWidget(resolved, match?.[1] || '') }).range(node.from, node.to));
+          if (resolved) ranges.push(Decoration.replace({ atomic: true, widget: new ImageWidget(resolved, match?.[1] || '') }).range(node.from, node.to));
         }
       }
       if (name === 'InlineCode' || name === 'FencedCode' || name === 'CodeBlock' || name === 'CodeText') {
@@ -831,7 +831,7 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
         hide(node.from, node.to);
       } else if (name === 'TaskMarker' && !lineIsActive(state.doc.lineAt(node.from).number)) {
         const marker = state.doc.sliceString(node.from, node.to);
-        ranges.push(Decoration.replace({ widget: new TaskWidget(node.from, node.to, /x/i.test(marker)) }).range(node.from, node.to));
+        ranges.push(Decoration.replace({ atomic: true, widget: new TaskWidget(node.from, node.to, /x/i.test(marker)) }).range(node.from, node.to));
       } else if (name === 'ListMark' && !lineIsActive(state.doc.lineAt(node.from).number) && !/^\d/.test(state.doc.sliceString(node.from, node.to))) {
         hide(node.from, node.to);
       }
@@ -842,7 +842,7 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
     const line = state.doc.line(lineNumber);
     const display = /^\s*\$\$([^$\n]+)\$\$\s*$/.exec(line.text);
     if (display && !lineIsActive(line.number) && !protectedRanges.some(range => range.from < line.to && range.to > line.from)) {
-      ranges.push(Decoration.replace({ widget: new MathWidget(display[1].trim(), true) }).range(line.from, line.to));
+      ranges.push(Decoration.replace({ atomic: true, widget: new MathWidget(display[1].trim(), true) }).range(line.from, line.to));
       continue;
     }
     for (const match of line.text.matchAll(inlineMathPattern)) {
@@ -851,7 +851,7 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
       const to = from + match[0].length;
       if (rangeIsActive(from, to)) continue;
       if (protectedRanges.some(range => range.from < to && range.to > from)) continue;
-      ranges.push(Decoration.replace({ widget: new MathWidget(match[1], false) }).range(from, to));
+      ranges.push(Decoration.replace({ atomic: true, widget: new MathWidget(match[1], false) }).range(from, to));
     }
   }
 
@@ -859,16 +859,59 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
   return Decoration.set(ranges, true);
 }
 
+// Adjacent hidden tokens (such as a link's destination and delimiters) must
+// form one range so keyboard navigation cannot stop between invisible tokens.
+function previewAtomicRanges(decorations: DecorationSet): DecorationSet {
+  const ranges: Range<Decoration>[] = [];
+  let from = -1;
+  let to = -1;
+  for (let cursor = decorations.iter(); cursor.value; cursor.next()) {
+    if (!cursor.value.spec.atomic) continue;
+    if (from >= 0 && cursor.from > to) {
+      ranges.push(Decoration.replace({}).range(from, to));
+      from = -1;
+    }
+    if (from < 0) from = cursor.from;
+    to = Math.max(to, cursor.to);
+  }
+  if (from >= 0) ranges.push(Decoration.replace({}).range(from, to));
+  return Decoration.set(ranges);
+}
+
 export function createLivePreviewExtension(imageUrls: Map<string, string>, documentPath: string | null) {
   return ViewPlugin.fromClass(class {
-  decorations: DecorationSet;
+    decorations: DecorationSet;
+    atomicRanges: DecorationSet;
+    activeSelection: EditorSelection;
+    pointerOnWidget = false;
 
-  constructor(view: EditorView) { this.decorations = buildLivePreviewDecorations(view, imageUrls, documentPath); }
-
-  update(update: { view: EditorView; docChanged: boolean; selectionSet: boolean; viewportChanged: boolean; transactions: readonly { effects: readonly StateEffect<unknown>[] }[] }) {
-    if (update.docChanged || update.selectionSet || update.viewportChanged || update.transactions.some(transaction => transaction.effects.some(effect => effect.is(refreshLivePreview)))) {
-      this.decorations = buildLivePreviewDecorations(update.view, imageUrls, documentPath);
+    constructor(view: EditorView) {
+      this.activeSelection = view.state.selection;
+      this.decorations = buildLivePreviewDecorations(view, imageUrls, documentPath, this.activeSelection);
+      this.atomicRanges = previewAtomicRanges(this.decorations);
     }
-  }
-  }, { decorations: value => value.decorations });
+
+    update(update: ViewUpdate) {
+      // Keep the projection stable during text clicks and range selection. Revealing
+      // syntax moves the clicked text and changes the next mouse/arrow target.
+      // Direct clicks on rendered widgets still open their source for editing.
+      const pointerSelection = update.transactions.some(transaction => transaction.isUserEvent('select.pointer'));
+      if (update.docChanged || (update.selectionSet && update.state.selection.main.empty && (!pointerSelection || this.pointerOnWidget))) {
+        this.activeSelection = update.state.selection;
+      }
+      if (update.docChanged || update.selectionSet || update.viewportChanged || update.transactions.some(transaction => transaction.effects.some(effect => effect.is(refreshLivePreview)))) {
+        this.decorations = buildLivePreviewDecorations(update.view, imageUrls, documentPath, this.activeSelection);
+        this.atomicRanges = previewAtomicRanges(this.decorations);
+      }
+    }
+  }, {
+    eventHandlers: {
+      mousedown(event) {
+        this.pointerOnWidget = event.target instanceof Element && !!event.target.closest('.cm-live-math-inline, .cm-live-math-display, .cm-live-image');
+        return false;
+      },
+    },
+    decorations: value => value.decorations,
+    provide: plugin => EditorView.atomicRanges.of(view => view.plugin(plugin)?.atomicRanges || Decoration.none),
+  });
 }
