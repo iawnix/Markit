@@ -329,6 +329,7 @@ export default function App() {
     if (!isTauriRuntime) return;
     const appWindow = getCurrentWindow();
     let restoring = true;
+    let disposed = false;
     let persistTimer: number | null = null;
     let unlisten: (() => void) | undefined;
     let unlistenResize: (() => void) | undefined;
@@ -365,15 +366,16 @@ export default function App() {
     };
     void appWindow.setDecorations(false).catch(() => undefined);
     void restore();
-    void appWindow.onResized(schedulePersist).then(value => { unlistenResize = value; }).catch(() => undefined);
-    void appWindow.onMoved(schedulePersist).then(value => { unlistenMove = value; }).catch(() => undefined);
+    void appWindow.onResized(schedulePersist).then(value => { if (disposed) value(); else unlistenResize = value; }).catch(() => undefined);
+    void appWindow.onMoved(schedulePersist).then(value => { if (disposed) value(); else unlistenMove = value; }).catch(() => undefined);
     void appWindow.onCloseRequested(event => {
       const dirty = documentsRef.current.find(document => document.dirty);
       if (!dirty) { void persist(); return; }
       event.preventDefault();
       setPendingClose({ id: dirty.id, title: titleFor(dirty.path, locale), windowClose: true });
-    }).then(value => { unlisten = value; }).catch(() => undefined);
+    }).then(value => { if (disposed) value(); else unlisten = value; }).catch(reportError);
     return () => {
+      disposed = true;
       if (persistTimer !== null) window.clearTimeout(persistTimer);
       unlisten?.();
       unlistenResize?.();
@@ -804,7 +806,7 @@ export default function App() {
         if (!await saveDocumentById(document.id)) return;
       }
       setPendingClose(null);
-      if (isTauriRuntime) void getCurrentWindow().destroy().catch(() => undefined);
+      if (isTauriRuntime) void getCurrentWindow().destroy().catch(reportError);
       return;
     }
     const id = pendingClose.id;
@@ -816,7 +818,7 @@ export default function App() {
     if (!pendingClose) return;
     if (pendingClose.windowClose) {
       setPendingClose(null);
-      if (isTauriRuntime) void getCurrentWindow().destroy().catch(() => undefined);
+      if (isTauriRuntime) void getCurrentWindow().destroy().catch(reportError);
       return;
     }
     const id = pendingClose.id;
@@ -829,7 +831,7 @@ export default function App() {
     const appWindow = getCurrentWindow();
     try { if (await appWindow.isMaximized()) await appWindow.unmaximize(); else await appWindow.maximize(); } catch { /* Window controls are unavailable in browser preview. */ }
   };
-  const closeWindow = () => { if (isTauriRuntime) void getCurrentWindow().close().catch(() => undefined); };
+  const closeWindow = () => { if (isTauriRuntime) void getCurrentWindow().close().catch(reportError); };
   const toggleSidebar = () => {
     if (focusMode) {
       setFocusMode(false);

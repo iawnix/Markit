@@ -1,71 +1,66 @@
-# Markit Architecture
+# Architecture
 
-Markit uses Tauri 2 as its only desktop entrypoint. React and TypeScript live in
-`apps/desktop`, while Rust owns privileged and platform-specific operations.
-The repository is maintained as an independent project; new desktop features
-target Tauri and do not add a second desktop runtime.
+Markit is a Tauri 2 desktop application. React and TypeScript implement the
+interface in `apps/desktop/src`; Rust handles files and platform services in
+`apps/desktop/src-tauri`. Typed commands and events connect the two layers.
 
-## Runtime boundary
+## Documents and editing
 
-React owns document state, editor state, layout and accessible controls. Rust
-owns local files, atomic saves, revision checks, image validation, workspace
-search and platform integration. The UI communicates with Rust only through
-typed Tauri commands and events. It never receives Node APIs or arbitrary file
-URLs.
+Markdown is the stored document format. Each open document tracks its source,
+saved source, file revision, selection, scroll position and editing mode.
+CodeMirror 6 provides source editing and live preview decorations. The
+ProseMirror schema in `packages/editor` provides a semantic document model and
+source mapping utilities.
 
-The durable document format is Markdown. CodeMirror 6 edits the source
-directly; the ProseMirror schema in `packages/editor` is a semantic projection.
-Unknown blocks remain in the source editor until a lossless projection is
-available. Rust preserves UTF-8 BOM, line endings and file revisions, performs
-atomic saves, and rejects a save when the file changed outside Markit. Unsaved
-documents are serialized to the Tauri application configuration directory with
-a size limit. On the next launch the host asks whether to restore them; the
-recovery file is removed after dismissal or once all documents are saved.
+Rust preserves UTF-8 BOM and line endings, writes files atomically and checks
+file revisions before saving. The frontend prompts when a file changes on
+disk. Unsaved document snapshots are stored in the Tauri application
+configuration directory and offered for recovery at the next launch.
 
-## Package boundaries
+## Desktop window
 
-- `packages/contracts`: serializable document, revision and plugin contracts.
-- `packages/markdown`: heading extraction and rendering primitives.
-- `packages/editor`: ProseMirror projection and source range operations.
-- `packages/plugin-sdk`: manifest, permission and host API types.
-- `plugins/citations`: optional Zotero/CSL integration, packaged separately
-  from the core application.
+Tauri handles dragging and platform-specific double-click behavior for the
+custom titlebar. Buttons are excluded from the drag region.
 
-## Local development
+The close-request listener checks for unsaved documents. A clean window closes
+immediately; an edited document opens a save, discard or cancel dialog. Tauri's
+`onCloseRequested` helper finishes an accepted close with `destroy()`, so the
+main window capability grants both `allow-close` and `allow-destroy`.
 
-Install Node 24, Rust stable and the platform Tauri prerequisites. From the
-repository root:
+## Packages
 
-```sh
-npm ci
-npm run tauri:dev
-```
+| Path | Responsibility |
+| --- | --- |
+| `apps/desktop` | React interface, editors and desktop bridge |
+| `apps/desktop/src-tauri` | File services, image handling and platform integration |
+| `packages/contracts` | Document, revision and plugin data types |
+| `packages/markdown` | Markdown rendering and heading extraction |
+| `packages/editor` | Semantic document model and source operations |
+| `packages/plugin-sdk` | Plugin packages, permissions and Worker host |
+| `plugins/citations` | Zotero integration and citeproc formatting |
+| `src` | Electron implementation and shared modules used by the citations plugin |
 
-The browser-only frontend can be checked without Rust:
+## Plugins
 
-```sh
-npx tsc -p apps/desktop/tsconfig.json --noEmit
-npm run tauri:frontend
-```
+A `.markit-plugin` archive contains a manifest, a bundled entry module and an
+optional integrity record. Settings provides installation, enable/disable and
+removal controls. Manifests declare the plugin's permissions and contributions.
 
-Linux builds use WebKitGTK 4.1 and are produced in the Ubuntu 24.04 CI image.
-AppImage packages therefore require the host WebKitGTK/GTK runtime; DEB and RPM
-packages declare those dependencies. Fedora and Manjaro builds use the same
-Linux artifact and their distribution WebKitGTK compatibility packages.
+Plugin code runs in a Worker. Commands, document updates, settings and network
+requests pass through the host API. The host renders declarative panel content
+in the sidebar. Network requests support HTTP GET and POST to the local Zotero
+API on port 23119, with request-size, response-size and timeout limits.
 
-## Plugin boundary
+The Citations plugin stores search results through the settings API, formats
+bibliographies with citeproc-js and sends citation-number mappings to the live
+editor and HTML exporter. Citation keys remain in the Markdown source.
 
-Plugins are `.markit-plugin` packages with a manifest, an entry module and an
-optional integrity record. The desktop settings manager validates the archive,
-persists its manifest and enabled state, and displays requested permissions.
-Plugin code runs in a Worker and requests filesystem, network, command and
-settings access through a capability broker. UI contributions are declarative
-so plugins do not depend on React internals. There is no online marketplace in
-the first release; packages are installed locally. Registered commands are
-shown in the editor toolbar and execute inside the plugin Worker. Registered
-panels appear as isolated sidebar entries and receive no direct DOM access.
-Network access is brokered by the host and currently limited to the local
-Zotero endpoint at `localhost:23119`, with request, timeout and response-size
-limits. The citations plugin uses this boundary for Zotero search and cache
-updates, and exposes citation-number mappings to the live editor and HTML
-exporter without moving citation metadata into Markdown storage.
+See the [plugin development guide](../resources/Extensions.md) and
+[Citations documentation](../plugins/citations/README.md).
+
+## Development and builds
+
+See [Development](../resources/Development.md) for dependencies, commands and
+release steps, and [Testing](../resources/Validation.md) for automated and
+manual checks. Release artifacts are built by GitHub Actions on each target
+operating system. Linux uses WebKitGTK 4.1 and GTK3.

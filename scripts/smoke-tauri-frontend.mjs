@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { checkEditorColors } from './check-editor-colors.mjs';
 import { checkLiveSelection, checkLivePointer } from './check-live-selection.mjs';
+import { checkWindowClose } from './check-window-close.mjs';
 
 const host = '127.0.0.1';
 const port = 5174;
@@ -39,6 +40,8 @@ try {
   await waitForServer();
   const executablePath = ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(path => existsSync(path));
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+  await checkWindowClose(browser, url);
+  checks.push('window close lifecycle with runtime permissions: clean, dirty, cancel, discard, save all and failures');
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     window.openedExternalUrls = [];

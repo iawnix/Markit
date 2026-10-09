@@ -16,9 +16,9 @@
 
 - HTML、PDF、PNG 与即时排版共用公式和引用规则；输出使用当前未保存内容。
 - Pandoc 导出保留学术引用及书目位置。DOCX 使用原生可编辑数学对象，行间公式和编号同段，沿用 Word 字体、字号和颜色设置。
-- DOCX 的公式编号、引用和参考文献是 Markdown 快照，不是 Word 自动编号域或 Word 引文管理器记录。
+- DOCX 的公式编号、引用和参考文献以导出时的 Markdown 快照保存。
 - LaTeX、RST、Textile、MediaWiki 导出的本地图片写入目标旁的 `markedown-assets-*` 目录，分发时须一并携带。
-- 预留版本 1 的 Markdown 与文献提供器接口。内建公式、引文和 Zotero 使用同一接口约定；尚未提供外部插件加载或在线市场。
+- 预留版本 1 的 Markdown 与文献提供器接口。内建公式、引文和 Zotero 使用同一接口约定。
 - 附学术写作说明、可编辑示例、扩展开发说明及完整依赖许可材料。citeproc-js 按 CPAL 选项分发，保留启动与设置署名。
 
-具体测试范围和环境限制见 `Validation.md`。仍不包含自动更新、代码签名、Mermaid 或任意外部主题加载。
+测试环境和结果见 [Windows 0.3.x 验证记录](validation-history/0.3.6.md)。

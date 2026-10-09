@@ -1,26 +1,56 @@
-# Markit Citations Plugin
+# Citations and Zotero
 
-This optional plugin owns Zotero connectivity, CSL metadata, citeproc
-formatting and bibliography UI. The Markit core does not load it or include
-its dependencies at startup.
+The Citations plugin connects Markit to a local Zotero library. It provides a
+References sidebar, citation insertion and numeric bibliographies formatted
+with citeproc-js.
 
-The package keeps the existing `<!-- markedown:bibliography -->` marker for
-backward compatibility. It must declare loopback network access and access to
-its own cache directory before activation.
+## Install
 
-The host exposes Zotero requests through the plugin Worker network broker. The
-broker only permits HTTP GET and POST requests to `localhost:23119` and applies
-fixed request, timeout and response-size limits.
+1. Download `Markit-citations-<version>.markit-plugin` from
+   [Releases](https://github.com/iawnix/markit/releases/latest).
+2. Open Markit settings and choose **安装插件 / Install plugin**.
+3. Select the package, review its requested permissions and enable it.
+4. Start Zotero and enable its local API in Zotero's advanced settings.
 
-The package provides a References panel, Zotero connection check, citation
-insertion from the first available local item, bibliography marker insertion,
-and bibliography refresh for citation keys in the current Markdown document.
-Bibliography ordering and formatting use the bundled citeproc-js engine. Search
-results are cached per query for five minutes through the host settings API,
-and resolved citation keys are sent to the host so the live editor can display
-numbered inline citations without changing the Markdown source. The panel
-displays the required Frank Bennett attribution.
+The plugin uses the Zotero HTTP API at `http://127.0.0.1:23119/api/`.
 
-Remaining limitations are deliberate: the plugin currently queries Zotero's
-local HTTP API, supports numeric citations only, and does not provide an
-online bibliography service or a plugin marketplace.
+## Use
+
+Open a Markdown document, then select **References** in the sidebar. Search by
+title, author or year and press Enter. Selecting a result appends its citation
+to the document as `[@XXXXXXXX]`, using the eight-character Zotero item key.
+
+Plugin commands appear in the application menu:
+
+| Command | Action |
+| --- | --- |
+| Check Zotero connection | Request an item from the local API |
+| Insert Zotero citation | Append a citation for the first returned item |
+| Insert bibliography marker | Add `<!-- markedown:bibliography -->` to the document |
+| Refresh bibliography | Resolve cited items and write a numeric bibliography |
+
+Move the bibliography marker to choose where the list appears. Citation
+numbers are displayed in live preview and HTML export; the Markdown stores the
+Zotero keys. Search results are cached for five minutes.
+
+## Build
+
+From the repository root:
+
+```sh
+npm ci
+npm run plugin:citations
+```
+
+The output is `plugins/citations/dist/markit.citations.markit-plugin`. See the
+[plugin development guide](../../resources/Extensions.md) for the host API.
+
+## Permissions and attribution
+
+The manifest requests document read/write, network, commands and settings
+access. The host routes GET and POST requests to Zotero on port 23119.
+
+Bibliography formatting uses citeproc-js by Frank Bennett, distributed under
+the CPAL 1.0 option. The References panel displays its attribution. License
+texts and source information are listed in
+[Third-party notices](../../resources/ThirdPartyNotices.md#citeproc-js).
