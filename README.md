@@ -21,7 +21,7 @@ Markit 是一款跨平台的本地 Markdown 编辑器，适合研究笔记、技
 | 系统 | 软件包 |
 | --- | --- |
 | Windows | 安装程序 `.exe`、ZIP |
-| macOS | `.dmg` |
+| macOS（Apple Silicon） | `.dmg` |
 | Ubuntu / Debian | `.deb` |
 | Fedora / RHEL | `.rpm` |
 | 其他 Linux 发行版 | `.AppImage`、`.tar.gz` |

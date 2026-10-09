@@ -74,10 +74,13 @@ jobs:
           name: Markit-Windows-x64
           path: apps/desktop/src-tauri/target/release/bundle/**
           if-no-files-found: error
+      - name: Verify macOS architecture
+        if: runner.os == 'macOS'
+        run: test "$(lipo -archs apps/desktop/src-tauri/target/release/bundle/macos/Markit.app/Contents/MacOS/markit)" = "arm64"
       - name: Upload macOS bundles
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: Markit-macOS-x64
+          name: Markit-macOS-arm64
           path: apps/desktop/src-tauri/target/release/bundle/**
           if-no-files-found: error

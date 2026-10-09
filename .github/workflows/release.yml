@@ -155,8 +155,9 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           dmg="$(find apps/desktop/src-tauri/target/release/bundle/dmg -type f -name '*.dmg' -print -quit)"
           test -n "$dmg"
+          test "$(lipo -archs apps/desktop/src-tauri/target/release/bundle/macos/Markit.app/Contents/MacOS/markit)" = "arm64"
           mkdir -p release-assets
-          cp "$dmg" "release-assets/Markit-$version-macOS-x64.dmg"
+          cp "$dmg" "release-assets/Markit-$version-macOS-arm64.dmg"
 
       - name: Verify macOS release asset
         if: matrix.platform == 'macos'
@@ -164,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          dmg="release-assets/Markit-$version-macOS-x64.dmg"
+          dmg="release-assets/Markit-$version-macOS-arm64.dmg"
           test -s "$dmg"
           hdiutil imageinfo "$dmg" >/dev/null
           hdiutil verify "$dmg"
@@ -211,7 +212,7 @@ jobs:
           expected=(
             "Markit-$version-Windows-x64-Setup.exe"
             "Markit-$version-Windows-x64.zip"
-            "Markit-$version-macOS-x64.dmg"
+            "Markit-$version-macOS-arm64.dmg"
             "Markit-$version-Linux-x64.AppImage"
             "Markit-$version-Linux-x64.deb"
             "Markit-$version-Linux-x64.rpm"
@@ -272,7 +273,7 @@ jobs:
           expected=(
             "Markit-$version-Windows-x64-Setup.exe"
             "Markit-$version-Windows-x64.zip"
-            "Markit-$version-macOS-x64.dmg"
+            "Markit-$version-macOS-arm64.dmg"
             "Markit-$version-Linux-x64.AppImage"
             "Markit-$version-Linux-x64.deb"
             "Markit-$version-Linux-x64.rpm"

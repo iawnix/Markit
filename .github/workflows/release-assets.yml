@@ -27,7 +27,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
-      - name: Keep Windows and Linux Packages
+      - name: Keep desktop packages
         shell: pwsh
         run: |
           if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid release tag.' }
@@ -35,11 +35,14 @@ jobs:
           $release = gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the release.' }
           if ($release.tag_name -cne $env:RELEASE_TAG -or $release.draft -or $release.immutable) { throw 'Expected a mutable published release.' }
-          $keep = @("Markit-$version-Windows-x64-Setup.exe", "Markit-$version-Windows-x64.zip", "Markit-$version-macOS-x64.dmg", "Markit-$version-Linux-x64.AppImage", "Markit-$version-Linux-x64.deb", "Markit-$version-Linux-x64.rpm", "Markit-$version-Linux-x64.tar.gz")
+          $keep = @("Markit-$version-Windows-x64-Setup.exe", "Markit-$version-Windows-x64.zip", "Markit-$version-Linux-x64.AppImage", "Markit-$version-Linux-x64.deb", "Markit-$version-Linux-x64.rpm", "Markit-$version-Linux-x64.tar.gz")
           $remove = @("Markit-$version-Windows-Source.zip", 'README.zh-CN.md', 'THIRD_PARTY_LICENSES.txt', 'THIRD_PARTY_DEPENDENCIES.json', 'ThirdPartyNotices.md')
           $assets = @(gh api --paginate --slurp "repos/$env:GH_REPO/releases/$($release.id)/assets" | ConvertFrom-Json | ForEach-Object { $_ })
           if ($LASTEXITCODE -ne 0) { throw 'Could not list release assets.' }
           $assets = @($assets | ForEach-Object { $_ })
+          $macAssets = @($assets | Where-Object { $_.name -ceq "Markit-$version-macOS-arm64.dmg" -or $_.name -ceq "Markit-$version-macOS-x64.dmg" })
+          if ($macAssets.Count -lt 1) { throw 'Expected a macOS package.' }
+          $keep += @($macAssets | ForEach-Object { $_.name })
           $pluginAssets = @($assets | Where-Object { $_.name -cmatch '^Markit-citations-\d+\.\d+\.\d+\.markit-plugin$' })
           if ($pluginAssets.Count -ne 1) { throw 'Expected exactly one citations plugin package.' }
           $keep += $pluginAssets[0].name
