@@ -1,3 +1,4 @@
+import { checkDocumentWorkspace } from './check-document-workspace.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +41,8 @@ try {
   await waitForServer();
   const executablePath = ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(path => existsSync(path));
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+  await checkDocumentWorkspace(browser, url);
+  checks.push('standalone/project navigation, image insertion, asynchronous tabs, save as and portable exports');
   await checkWindowClose(browser, url);
   checks.push('window close lifecycle with runtime permissions: clean, dirty, cancel, discard, save all and failures');
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });

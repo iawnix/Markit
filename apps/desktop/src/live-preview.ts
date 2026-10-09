@@ -1,3 +1,4 @@
+import { imageReferences, localImagePath } from './markdown-assets';
 import { syntaxTree } from '@codemirror/language';
 import { EditorState, StateEffect, type EditorSelection, type Range, type StateCommand } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
@@ -677,6 +678,7 @@ function lineRange(state: EditorState, from: number, to: number): [number, numbe
 }
 
 export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<string, string>, documentPath: string | null, activeSelection = view.state.selection): DecorationSet {
+  let references: ReturnType<typeof imageReferences> | undefined;
   const { state } = view;
   const cursorLine = state.doc.lineAt(activeSelection.main.head).number;
   const { from: selectionFrom, to: selectionTo } = activeSelection.main;
@@ -762,12 +764,13 @@ export function buildLivePreviewDecorations(view: EditorView, imageUrls: Map<str
       }
       if (name === 'Image' && !rangeIsActive(node.from, node.to)) {
         const raw = state.doc.sliceString(node.from, node.to);
-        const match = /^!\[([^\]]*)\]\((?:<([^>\n]+)>|([^\s)\n]+))(?:\s+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?\)$/.exec(raw);
-        const source = match?.[2] || match?.[3];
-        if (source) {
-          const decoded = (() => { try { return decodeURIComponent(source); } catch { return source; } })();
-          const resolved = /^(?:https?:|data:|markit-asset:)/i.test(decoded) ? decoded : documentPath ? imageUrls.get(`${documentPath}\0${decoded}`) : undefined;
-          if (resolved) ranges.push(Decoration.replace({ atomic: true, widget: new ImageWidget(resolved, match?.[1] || '') }).range(node.from, node.to));
+        const reference = (references ||= imageReferences(state.doc.toString())).find(ref => ref.from >= node.from && ref.to <= node.to);
+        if (reference) {
+          const source = reference.destination;
+          let local: string | null = null;
+          try { local = localImagePath(source); } catch { /* Invalid paths stay visible. */ }
+          const resolved = /^(?:https?:|data:|markit-asset:)/i.test(source) ? source : documentPath && local ? imageUrls.get(`${documentPath}\0${local}`) : undefined;
+          if (resolved) ranges.push(Decoration.replace({ atomic: true, widget: new ImageWidget(resolved, /^!\[([^\]]*)\]/.exec(raw)?.[1] || '') }).range(node.from, node.to));
         }
       }
       if (name === 'InlineCode' || name === 'FencedCode' || name === 'CodeBlock' || name === 'CodeText') {

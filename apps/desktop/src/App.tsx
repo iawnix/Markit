@@ -1,9 +1,13 @@
+import { FilesPanel } from './FilesPanel';
+import { basename, dirname, joinPath, isDocument, isImage, relativePath, encodeImagePath } from './document-paths';
+import { prepareDocumentCopy, embedDocumentImages } from './document-resources';
+import { zipSync, strToU8 } from 'fflate';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save as saveFile } from '@tauri-apps/plugin-dialog';
 import { Code2, Download, Eye, FileText, FolderOpen, Focus, ImageDown, ImagePlus, Info, Languages, Menu, Minus, PanelLeft, Play, Plus, Printer, Puzzle, RotateCcw, Save, Search, Settings2, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
 import { getCurrentWindow, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
-import { clearRecovery, exportHtml as writeHtml, exportPng as writePng, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, writeRecovery } from './bridge';
+import { clearRecovery, exportHtml as writeHtml, exportPng as writePng, fileRevision, importImages as writeImages, isTauriRuntime, listDirectory, outline, readDocument, readPluginPackage, readRecovery, saveDocument, saveDocumentCopy, optionalFileRevision, registerAsset, readImage, exportZip, openResource, takeOpenPaths, writeRecovery } from './bridge';
 import type { DirectoryEntry, DocumentSnapshot, ImageInput, Locale, OutlineEntry } from './contracts';
 import { message } from './i18n';
 import { renderHtmlDocument } from '../../../packages/markdown/src/index';
@@ -95,13 +99,23 @@ export default function App() {
     const stored = storedValue === null ? Number.NaN : Number(storedValue);
     return Number.isFinite(stored) ? Math.min(1600, Math.max(720, stored)) : 1120;
   });
-  const [sidebar, setSidebar] = useState<Sidebar>('outline');
-  const [documents, setDocuments] = useState<DocumentSnapshot[]>([]);
+  const [sidebar, setSidebar] = useState<Sidebar>('files');
+  const [documents, setDocumentState] = useState<DocumentSnapshot[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [headings, setHeadings] = useState<OutlineEntry[]>([]);
   const [activeHeadingIndex, setActiveHeadingIndex] = useState(-1);
-  const [workspace, setWorkspace] = useState('');
-  const [entries, setEntries] = useState<DirectoryEntry[]>([]);
+  const [projectRoot, setProjectRoot] = useState<string | null>(() => localStorage.getItem('markit.projectRoot'));
+  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(projectRoot);
+  const [fileRefresh, setFileRefresh] = useState(0);
+  const [imagePreview, setImagePreview] = useState<{ path: string; url: string } | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [imageGrants, setImageGrants] = useState<Record<string, string[]>>(() => {
+    try { const value: unknown = JSON.parse(localStorage.getItem('markit.imageGrants') || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([, roots]) => Array.isArray(roots) && roots.every(root => typeof root === 'string'))) : {}; } catch { return {}; }
+  });
+  const resourceOperations = useRef(new Set<string>());
+  const saveOperations = useRef(new Map<string, Promise<boolean>>());
+  const preferredDirectories = useRef(new Map<string, string>());
+  const commandsRef = useRef({ open: () => {}, project: () => {}, saveAs: () => {} });
   const [query, setQuery] = useState('');
   const [replacement, setReplacement] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
@@ -124,6 +138,11 @@ export default function App() {
   const editorRef = useRef<SourceEditorHandle>(null);
   const editorScrollRef = useRef<HTMLDivElement>(null);
   const documentsRef = useRef<DocumentSnapshot[]>([]);
+  function setDocuments(update: DocumentSnapshot[] | ((current: DocumentSnapshot[]) => DocumentSnapshot[])) {
+    const next = typeof update === 'function' ? update(documentsRef.current) : update;
+    documentsRef.current = next;
+    setDocumentState(next);
+  }
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pluginInputRef = useRef<HTMLInputElement>(null);
   const pluginHostsRef = useRef(new Map<string, PluginWorkerHost>());
@@ -134,6 +153,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [printRestoreMode, setPrintRestoreMode] = useState<'source' | 'live' | null>(null);
   const [pngExporting, setPngExporting] = useState(false);
+  const [pngSource, setPngSource] = useState<string | null>(null);
   const errorTimerRef = useRef<number | null>(null);
   const [pluginCommands, setPluginCommands] = useState<PluginCommandContribution[]>([]);
   const [pluginPanels, setPluginPanels] = useState<PluginPanelContribution[]>([]);
@@ -178,15 +198,22 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!recoveryLoaded) return;
     const onOpen = (event: Event) => {
       const path = (event as CustomEvent<string>).detail;
       if (path) void openPath(path);
     };
     window.addEventListener('markit:open-path', onOpen);
     let unlisten: (() => void) | undefined;
-    if (isTauriRuntime) void listen<string>('open-file', event => { void openPath(event.payload); }).then(value => { unlisten = value; });
-    return () => { window.removeEventListener('markit:open-path', onOpen); unlisten?.(); };
-  }, []);
+    let disposed = false;
+    const drain = async () => { for (const path of await takeOpenPaths()) { if (!disposed) await openPath(path); } };
+    if (isTauriRuntime) void listen<string>('open-file', () => { void drain().catch(reportError); }).then(value => {
+      if (disposed) { value(); return; }
+      unlisten = value;
+      return drain();
+    }).catch(reportError);
+    return () => { disposed = true; window.removeEventListener('markit:open-path', onOpen); unlisten?.(); };
+  }, [recoveryLoaded]);
 
   useEffect(() => {
     if (!active) {
@@ -237,15 +264,13 @@ export default function App() {
       if (records.length && window.confirm(t('recoveryFound'))) {
         setDocuments(records);
         setActiveId(records[0].id);
-        const firstPath = records[0].path;
-        if (firstPath) setWorkspace(firstPath.replace(/[\\/][^\\/]+$/, '') || firstPath);
       } else if (records.length) {
         void clearRecovery();
       }
       setRecoveryLoaded(true);
     }).catch(() => setRecoveryLoaded(true));
     return () => { cancelled = true; };
-  }, [locale]);
+  }, []);
   useEffect(() => {
     if (!recoveryLoaded) return;
     const recoverable = documents.filter(document => document.dirty || (!document.path && document.source !== document.savedSource));
@@ -310,13 +335,15 @@ export default function App() {
         if (pendingClose) { setPendingClose(null); return; }
         if (linkEditorOpenRef.current) { resolveLinkEditor(null); return; }
         setMenuOpen(false);
+        setImagePreview(null);
         return;
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        void saveRef.current();
+        if (event.shiftKey) commandsRef.current.saveAs(); else void saveRef.current();
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') { event.preventDefault(); if (event.shiftKey) commandsRef.current.project(); else commandsRef.current.open(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key === 'j') {
         event.preventDefault();
         setFocusMode(current => !current);
@@ -369,6 +396,7 @@ export default function App() {
     void appWindow.onResized(schedulePersist).then(value => { if (disposed) value(); else unlistenResize = value; }).catch(() => undefined);
     void appWindow.onMoved(schedulePersist).then(value => { if (disposed) value(); else unlistenMove = value; }).catch(() => undefined);
     void appWindow.onCloseRequested(event => {
+      if (resourceOperations.current.size || saveOperations.current.size) { event.preventDefault(); reportError(t('resourceBusy')); return; }
       const dirty = documentsRef.current.find(document => document.dirty);
       if (!dirty) { void persist(); return; }
       event.preventDefault();
@@ -382,7 +410,16 @@ export default function App() {
       unlistenMove?.();
     };
   }, [locale]);
-  useEffect(() => { documentsRef.current = documents; }, [documents]);
+  useEffect(() => {
+    if (projectRoot) localStorage.setItem('markit.projectRoot', projectRoot);
+    else localStorage.removeItem('markit.projectRoot');
+  }, [projectRoot]);
+  useEffect(() => { localStorage.setItem('markit.imageGrants', JSON.stringify(imageGrants)); }, [imageGrants]);
+  useEffect(() => {
+    const refresh = () => setFileRefresh(value => value + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => {
     setSelectedPluginPanel(current => current ? pluginPanels.find(panel => panel.pluginId === current.pluginId && panel.id === current.id) || current : null);
@@ -410,13 +447,12 @@ export default function App() {
       const existing = documentsRef.current.find(item => item.path === path);
       if (existing) {
         setActiveId(existing.id);
-        setWorkspace(path.replace(/[\\/][^\\/]+$/, '') || path);
         return;
       }
       const document = await readDocument(path);
-      setDocuments(current => current.some(item => item.path === path) ? current : [...current, document]);
-      setActiveId(document.id);
-      setWorkspace(path.replace(/[\\/][^\\/]+$/, '') || path);
+      const duplicate = documentsRef.current.find(item => item.path === document.path);
+      if (!duplicate) setDocuments(current => [...current, document]);
+      setActiveId(duplicate?.id || document.id);
     } catch (error) { reportError(error); }
   }
 
@@ -431,8 +467,11 @@ export default function App() {
     try {
       const selection = await open({ multiple: false, directory: true });
       if (typeof selection !== 'string') return;
-      setWorkspace(selection);
-      setEntries(await listDirectory(selection));
+      await listDirectory(selection);
+      setProjectRoot(selection);
+      setSelectedDirectory(selection);
+      setSidebar('files');
+      setSidebarCollapsed(false);
     } catch (error) { reportError(error); }
   }
 
@@ -441,38 +480,122 @@ export default function App() {
       id: crypto.randomUUID(), path: null, title: t('untitled'), source: '# Untitled\n\n', savedSource: '# Untitled\n\n',
       dirty: false, revision: null, bom: false, lineEnding: 'LF', mode: 'live', selection: { anchor: 0, head: 0 }, scrollTop: 0,
     };
+    const directory = selectedDirectory || projectRoot;
+    if (directory) preferredDirectories.current.set(document.id, directory);
     setDocuments(current => [...current, document]); setActiveId(document.id);
   }
 
   async function save() {
-    if (!active) return;
+    if (!active || resourceOperations.current.has(active.id)) return;
     await saveDocumentById(active.id);
   }
 
-  async function saveDocumentById(id: string): Promise<boolean> {
-    const snapshot = documentsRef.current.find(item => item.id === id);
+  function rootsFor(document: DocumentSnapshot): string[] {
+    return [...(projectRoot ? [projectRoot] : []), ...(imageGrants[document.path || document.id] || [])];
+  }
+
+  function saveDocumentById(id: string, forImages = false): Promise<boolean> {
+    const pending = saveOperations.current.get(id);
+    if (pending) return pending;
+    const operation = performSave(id, forImages).finally(() => saveOperations.current.delete(id));
+    saveOperations.current.set(id, operation);
+    return operation;
+  }
+
+  async function performSave(id: string, forImages: boolean): Promise<boolean> {
+    let snapshot = documentsRef.current.find(item => item.id === id);
     if (!snapshot) return false;
     try {
       let path = snapshot.path;
       if (!path) {
-        const selected = await saveFile({ defaultPath: 'Untitled.md', filters: [{ name: 'Markdown', extensions: ['md'] }] });
+        const directory = preferredDirectories.current.get(id) || selectedDirectory || projectRoot || localStorage.getItem('markit.saveDirectory');
+        const selected = await saveFile({ title: forImages ? t('saveForImages') : t('save'), defaultPath: directory ? joinPath(directory, 'Untitled.md') : 'Untitled.md', filters: [{ name: 'Markdown', extensions: ['md'] }] });
         if (typeof selected !== 'string') return false;
         path = selected;
+        if (documentsRef.current.some(item => item.id !== id && item.path === path)) throw new Error('This path is already open in another tab.');
       }
+      snapshot = documentsRef.current.find(item => item.id === id);
+      if (!snapshot) return false;
       const revision = await saveDocument(path, snapshot.source, snapshot.path ? snapshot.revision : null, snapshot.bom, snapshot.lineEnding);
-      const changedDuringSave = documentsRef.current.find(item => item.id === id)?.source !== snapshot.source;
-      setDocuments(current => current.map(item => item.id === id ? { ...item, path, title: titleFor(path, locale), savedSource: snapshot.source, dirty: item.source !== snapshot.source, revision, externalChange: false } : item));
+      const savedSource = snapshot.source;
+      const changedDuringSave = documentsRef.current.find(item => item.id === id)?.source !== savedSource;
+      setDocuments(current => current.map(item => item.id === id ? { ...item, path, title: titleFor(path, locale), savedSource, dirty: item.source !== savedSource, revision, externalChange: false } : item));
+      localStorage.setItem('markit.saveDirectory', dirname(path));
+      setFileRefresh(value => value + 1);
       return !changedDuringSave;
-    } catch (error) {
-      reportError(error);
-      return false;
-    }
+    } catch (error) { reportError(error); return false; }
   }
+
+  async function saveAs() {
+    const initial = documentsRef.current.find(item => item.id === activeIdRef.current);
+    if (!initial || resourceOperations.current.has(initial.id) || saveOperations.current.has(initial.id)) return;
+    const id = initial.id;
+    resourceOperations.current.add(id);
+    try {
+      const path = await saveFile({ title: t('saveAs'), defaultPath: initial.path || 'Untitled.md', filters: [{ name: 'Markdown', extensions: ['md'] }] });
+      if (typeof path !== 'string') return;
+      const snapshot = documentsRef.current.find(item => item.id === id);
+      if (!snapshot) return;
+      if (path === snapshot.path) { await saveDocumentById(snapshot.id); return; }
+      if (documentsRef.current.some(item => item.id !== snapshot.id && item.path === path)) throw new Error('This path is already open in another tab.');
+      // Capture the destination revision before asynchronous resource reads.
+      const expected = await optionalFileRevision(path);
+      const copy = await prepareDocumentCopy(snapshot.source, snapshot.path, path, rootsFor(snapshot));
+      const revision = await saveDocumentCopy(path, copy.source, copy.assets, expected, snapshot.bom, snapshot.lineEnding);
+      const current = documentsRef.current.find(item => item.id === snapshot.id);
+      if (current?.source !== snapshot.source) {
+        reportError('A copy was saved. The original tab stays open because it was edited during Save as.');
+      } else {
+        setDocuments(current => current.map(item => item.id === snapshot.id ? { ...item, path, title: titleFor(path, locale), source: copy.source, savedSource: copy.source, dirty: false, revision, externalChange: false } : item));
+      }
+      localStorage.setItem('markit.saveDirectory', dirname(path));
+      setFileRefresh(value => value + 1);
+    } catch (error) { reportError(error); }
+    finally { resourceOperations.current.delete(id); }
+  }
+
+  async function exportBundle() {
+    if (!active) return;
+    const snapshot = active;
+    try {
+      const name = basename(snapshot.path || 'Untitled.md').replace(/\.[^.]+$/, '');
+      const path = await saveFile({ defaultPath: `${name}.zip`, filters: [{ name: 'ZIP', extensions: ['zip'] }] });
+      if (typeof path !== 'string') return;
+      const filename = basename(snapshot.path || 'Untitled.md');
+      const copy = await prepareDocumentCopy(snapshot.source, snapshot.path, filename, rootsFor(snapshot));
+      const source = (snapshot.bom ? '\uFEFF' : '') + (snapshot.lineEnding === 'CRLF' ? copy.source.replace(/\n/g, '\r\n') : copy.source);
+      const entries: Record<string, Uint8Array> = { [filename]: strToU8(source) };
+      for (const asset of copy.assets) entries[asset.relativePath] = new Uint8Array(asset.bytes);
+      await exportZip(path, zipSync(entries));
+    } catch (error) { reportError(error); }
+  }
+
+  async function allowImageFolder() {
+    if (!active) return;
+    const key = active.path || active.id;
+    try {
+      const path = await open({ title: t('allowImageFolder'), directory: true, multiple: false });
+      if (typeof path === 'string') setImageGrants(current => ({ ...current, [key]: [...new Set([...(current[key] || []), path])] }));
+    } catch (error) { reportError(error); }
+  }
+
+  async function openEntry(entry: DirectoryEntry) {
+    setSelectedDirectory(dirname(entry.path));
+    if (isDocument(entry.name)) { await openPath(entry.path); return; }
+    try {
+      if (isImage(entry.name)) {
+        const url = await registerAsset(entry.path, basename(entry.path), projectRoot ? [projectRoot] : []);
+        setImagePreview({ path: entry.path, url });
+      } else await openResource(entry.path);
+    } catch (error) { reportError(error); }
+  }
+
+  commandsRef.current = { open: () => { void chooseDocument(); }, project: () => { void chooseWorkspace(); }, saveAs: () => { void saveAs(); } };
 
   saveRef.current = save;
 
   async function reloadActiveDocument() {
-    if (!active?.path) return;
+    if (!active?.path || resourceOperations.current.has(active.id)) return;
     try {
       const fresh = await readDocument(active.path);
       setDocuments(current => current.map(item => item.id === active.id ? { ...fresh, id: item.id, mode: item.mode, externalChange: false } : item));
@@ -482,8 +605,9 @@ export default function App() {
   async function exportDocument() {
     if (!active) return;
     const defaultName = `${titleFor(active.path, locale).replace(/\.(md|markdown|mdown|mkd)$/i, '') || 'Markit-export'}.html`;
-    const html = renderHtmlDocument(active.source, titleFor(active.path, locale), citationMap);
     try {
+      const embedded = await embedDocumentImages(active.source, active.path, rootsFor(active));
+      const html = renderHtmlDocument(embedded, titleFor(active.path, locale), citationMap);
       if (!isTauriRuntime) {
         await writeHtml(defaultName, html);
         return;
@@ -500,6 +624,7 @@ export default function App() {
       const selected = await saveFile({ defaultPath: defaultName, filters: [{ name: 'PNG image', extensions: ['png'] }] });
       if (typeof selected !== 'string') return;
       setPngExporting(true);
+      setPngSource(await embedDocumentImages(active.source, active.path, rootsFor(active)));
       let element: HTMLElement | null = null;
       for (let attempt = 0; attempt < 80 && !element; attempt += 1) {
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -520,6 +645,7 @@ export default function App() {
       reportError(error);
     } finally {
       setPngExporting(false);
+      setPngSource(null);
     }
   }
 
@@ -553,22 +679,49 @@ export default function App() {
     }
   }
 
-  async function insertImages(files: File[], positionOverride?: number) {
-    if (!active?.path || !files.length) return;
-    const position = positionOverride ?? editorRef.current?.getSelectionStart?.() ?? active.source.length;
+  function updateDocumentSource(id: string, source: string) {
+    setDocuments(current => current.map(item => item.id === id ? { ...item, source, dirty: source !== item.savedSource } : item));
+  }
+
+  async function insertImages(files: File[], existingPath?: string) {
+    const target = documentsRef.current.find(item => item.id === activeIdRef.current);
+    if (!target || (!files.length && !existingPath) || resourceOperations.current.has(target.id)) return;
+    const insertion = editorRef.current?.captureInsertion();
+    resourceOperations.current.add(target.id);
     try {
-      const inputs: ImageInput[] = await Promise.all(files.slice(0, 100).map(async file => ({ name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })));
-      const destinations = await writeImages(active.path!, inputs);
-      const insertion = destinations.map(destination => `![](<${destination.replace(/[<>\n]/g, character => encodeURIComponent(character))}>)`).join('\n');
-      if (editorRef.current) {
-        const position = editorRef.current.getSelectionStart();
-        editorRef.current.setSelection(position);
-        editorRef.current.insertMarkdown(`${position && !/\n$/.test(active.source.slice(0, position)) ? '\n' : ''}${insertion}\n`);
-        return;
+      if (!target.path) {
+        await saveDocumentById(target.id, true);
+        if (!documentsRef.current.find(item => item.id === target.id)?.path) return;
       }
-      const source = active.source.slice(0, position) + (position && !/\n$/.test(active.source.slice(0, position)) ? '\n' : '') + insertion + '\n' + active.source.slice(position);
-      updateSource(source);
+      const snapshot = documentsRef.current.find(item => item.id === target.id);
+      if (!snapshot?.path) return;
+      let destinations: string[];
+      if (existingPath) {
+        try {
+          const relative = relativePath(snapshot.path, existingPath);
+          // Explicitly choosing an image also grants its containing folder for this document.
+          const folder = dirname(existingPath);
+          await registerAsset(snapshot.path, relative, [...rootsFor(snapshot), folder]);
+          setImageGrants(current => ({ ...current, [snapshot.path!]: [...new Set([...(current[snapshot.path!] || []), folder])] }));
+          destinations = [encodeImagePath(relative)];
+        } catch {
+          const image = await readImage(existingPath, basename(existingPath), [dirname(existingPath)]);
+          destinations = await writeImages(snapshot.path, [{ name: image.name, bytes: image.bytes }]);
+        }
+      } else {
+        if (files.length > 100 || files.reduce((total, file) => total + file.size, 0) > 256 * 1024 * 1024 || files.some(file => file.size > 64 * 1024 * 1024)) throw new Error('Images are limited to 64 MiB each, 100 files and 256 MiB per batch.');
+        const inputs: ImageInput[] = await Promise.all(files.map(async file => ({ name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })));
+        destinations = await writeImages(snapshot.path, inputs);
+      }
+      const markdown = destinations.map(destination => `![](<${destination}>)`).join('\n');
+      if (insertion) insertion.insert(markdown);
+      else {
+        const latest = documentsRef.current.find(item => item.id === target.id);
+        if (latest) updateDocumentSource(target.id, `${latest.source}\n${markdown}\n`);
+      }
+      setFileRefresh(value => value + 1);
     } catch (error) { reportError(error); }
+    finally { insertion?.cancel(); resourceOperations.current.delete(target.id); }
   }
 
   function persistPlugins(next: InstalledPlugin[]) {
@@ -791,6 +944,7 @@ export default function App() {
     setDocuments(current => current.filter(item => item.id !== id));
   };
   const requestCloseDocument = (id: string) => {
+    if (resourceOperations.current.has(id) || saveOperations.current.has(id)) { reportError(t('resourceBusy')); return; }
     const document = documents.find(item => item.id === id);
     if (!document) return;
     if (document.dirty) {
@@ -886,7 +1040,11 @@ export default function App() {
         <nav className="command-menu-list">
           <button onClick={() => { newDocument(); setMenuOpen(false); }}><Plus size={16} />{t('newDocument')}</button>
           <button onClick={() => { void chooseDocument(); setMenuOpen(false); }}><FolderOpen size={16} />{t('open')}</button>
-          <button disabled={!active?.dirty} onClick={() => { void save(); setMenuOpen(false); }}><Save size={16} />{t('save')}</button>
+          <button onClick={() => { void chooseWorkspace(); setMenuOpen(false); }}><FolderOpen size={16} />{t('openProject')}</button>
+          {projectRoot && <button onClick={() => { setProjectRoot(null); setSelectedDirectory(null); setMenuOpen(false); }}>{t('closeProject')}</button>}
+          <button disabled={!active || (!!active.path && !active.dirty)} onClick={() => { void save(); setMenuOpen(false); }}><Save size={16} />{t('save')}</button>
+          <button disabled={!active} onClick={() => { void saveAs(); setMenuOpen(false); }}><Save size={16} />{t('saveAs')}</button>
+          <button disabled={!active} onClick={() => { void exportBundle(); setMenuOpen(false); }}><Download size={16} />{t('exportZip')}</button>
           <button onClick={() => { void exportDocument(); setMenuOpen(false); }}><Download size={16} />{t('exportHtml')}</button>
           <button disabled={pngExporting} onClick={() => { void exportPngDocument(); setMenuOpen(false); }}><ImageDown size={16} />{t('exportPng')}</button>
           <button onClick={() => { printDocument(); setMenuOpen(false); }}><Printer size={16} />{t('printPdf')}</button>
@@ -908,7 +1066,7 @@ export default function App() {
           {pluginPanels.map(panel => <button key={`${panel.pluginId}:${panel.id}`} className={sidebar === 'plugin' && selectedPluginPanel?.pluginId === panel.pluginId && selectedPluginPanel.id === panel.id ? 'selected' : ''} title={panel.title} aria-label={panel.title} onClick={() => { setSidebar('plugin'); setSelectedPluginPanel(panel); }}>{panel.title}</button>)}
         </div>
         <div className="sidebar-content">
-          {sidebar === 'files' && <><div className="sidebar-heading"><span>{t('files')}</span><span><button className="icon-button" title="Open folder" aria-label="Open folder" onClick={() => void chooseWorkspace()}><FolderOpen size={15} /></button><button className="icon-button" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={15} /></button></span></div><p className="workspace-path">{workspace || 'Local workspace'}</p>{entries.filter(entry => !entry.directory && /\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)).map(entry => <button key={entry.path} className={`file-row ${active?.path === entry.path ? 'active' : ''}`} onClick={() => void openPath(entry.path)}><FileText size={15} /><span>{entry.name}</span></button>)}{!entries.length && <button className="file-row active" onClick={() => void chooseDocument()}><FileText size={15} /><span>{active ? titleFor(active.path, locale) : t('emptyTitle')}</span></button>}</>}
+          {sidebar === 'files' && <FilesPanel projectRoot={projectRoot} documents={documents} activeId={activeId} locale={locale} refresh={fileRefresh} onSelect={setActiveId} onOpen={entry => { void openEntry(entry); }} onOpenProject={() => { void chooseWorkspace(); }} onCloseProject={() => { setProjectRoot(null); setSelectedDirectory(null); }} onNew={newDocument} onRefresh={() => setFileRefresh(value => value + 1)} onDirectory={setSelectedDirectory} />}
           {sidebar === 'outline' && <><div className="sidebar-heading"><span>{t('outline')}</span><span className="count">{headings.length}</span></div>{filteredHeadings.length ? <nav className="outline-list">{filteredHeadings.map((item, index) => <button key={item.id} className={index === activeHeadingIndex ? 'active' : ''} style={{ paddingLeft: `${12 + item.level * 10}px` }} onClick={() => jumpToHeading(item)}>{item.text}</button>)}</nav> : <p className="empty-sidebar">{t('noOutline')}</p>}</>}
           {sidebar === 'search' && <><div className="sidebar-heading"><span>{t('search')}</span><span className="count">{query ? searchResults.length : ''}</span></div><input className="sidebar-search" value={query} onChange={event => { setQuery(event.target.value); setSearchIndex(0); }} placeholder={t('search')} /><input className="sidebar-search" value={replacement} onChange={event => setReplacement(event.target.value)} placeholder={t('replacePlaceholder')} disabled={!query.trim()} /><div className="search-actions"><button className="secondary-command" onClick={replaceCurrent} disabled={!query.trim() || !searchResults.length}>{t('replaceCurrent')}</button><button className="secondary-command" onClick={replaceAll} disabled={!query.trim() || !searchResults.length}>{t('replaceAll')}</button></div>{query && searchResults.length ? <div className="search-results">{searchResults.map((result, index) => <button className={`search-result ${index === searchIndex ? 'active' : ''}`} key={`${result.offset}:${index}`} onClick={() => jumpToSearch(result.offset, index)}><strong>{result.text}</strong><small>#{index + 1}</small></button>)}</div> : query ? <p className="empty-sidebar">{t('searchNoResults')}</p> : <p className="empty-sidebar">{t('searchHint')}</p>}</>}
           {sidebar === 'plugin' && selectedPluginPanel && <div className="plugin-panel"><div className="sidebar-heading"><span>{selectedPluginPanel.title}</span><span className="count"><Puzzle size={13} /></span></div>{selectedPluginPanel.searchCommand && <input className="plugin-panel-search" aria-label={t('pluginSearchPlaceholder')} placeholder={t('pluginSearchPlaceholder')} onKeyDown={event => { if (event.key === 'Enter') { const command = pluginCommands.find(item => item.pluginId === selectedPluginPanel.pluginId && item.id === selectedPluginPanel.searchCommand); if (command) void runPluginCommand(command, [(event.currentTarget as HTMLInputElement).value]); } }} />}{selectedPluginPanel.content?.status && <p className="plugin-panel-status">{selectedPluginPanel.content.status}</p>}{selectedPluginPanel.content?.items?.length ? <div className="plugin-panel-items">{selectedPluginPanel.content.items.map(item => <button className="plugin-panel-item" key={item.id} onClick={() => item.command && runPanelAction(selectedPluginPanel, item.command)} disabled={!item.command}><strong>{item.title}</strong>{item.meta && <small>{item.meta}</small>}</button>)}</div> : <p className="plugin-panel-status">{t('pluginNoResults')}</p>}{selectedPluginPanel.attribution && <p className="plugin-panel-attribution">{selectedPluginPanel.attribution}</p>}</div>}
@@ -918,16 +1076,18 @@ export default function App() {
       <main className="main-panel">
       <div className="document-tabs"><button className="new-tab" title={t('newDocument')} aria-label={t('newDocument')} onClick={newDocument}><Plus size={16} /></button>{documents.map(document => <button key={document.id} className={`document-tab ${document.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(document.id)}><FileText size={14} /><span>{titleFor(document.path, locale)}</span>{document.dirty && <i />}<span className="tab-close" role="button" aria-label="Close" onClick={event => { event.stopPropagation(); requestCloseDocument(document.id); }}><X size={13} /></span></button>)}</div>
         {active ? <>
-          <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
+          <div className="editor-toolbar"><button className="toolbar-command" onClick={newDocument}><Plus size={15} />{t('newDocument')}</button><button className="toolbar-command" onClick={() => void chooseDocument()}><FolderOpen size={15} />{t('open')}</button><button className="toolbar-command" onClick={() => void save()} disabled={!!active.path && !active.dirty}><Save size={15} />{t('save')}</button><button className="toolbar-command" onClick={() => void exportDocument()} title={t('exportHtml')}><Download size={15} />{t('exportHtml')}</button><button className="toolbar-command" onClick={() => imageInputRef.current?.click()} title={t('image')}><ImagePlus size={15} />{t('image')}</button><input ref={imageInputRef} hidden type="file" accept="image/*" multiple onChange={event => { void insertImages(Array.from(event.target.files || [])); event.currentTarget.value = ''; }} />{pluginCommands.filter(command => command.visible !== false).map(command => <button key={`${command.pluginId}:${command.id}`} className="toolbar-command plugin-command" title={command.shortcut ? `${command.title} (${command.shortcut})` : command.title} onClick={() => void runPluginCommand(command)}><Play size={14} /><span>{command.title}</span></button>)}<span className="toolbar-spacer" /><button className={`mode-switch ${active.mode === 'source' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}>{t('source')}</button><button className={`mode-switch ${active.mode === 'live' ? 'selected' : ''}`} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}>{t('live')}</button></div>
           {active.externalChange && <div className="external-change" role="alert"><span>{t('externalChange')}</span><button className="secondary-command" onClick={() => void reloadActiveDocument()}><RotateCcw size={14} />{t('reload')}</button></div>}
-          <div ref={editorScrollRef} className={`editor-scroll ${active.mode === 'source' ? 'source-mode-scroll' : ''}`}><div className={`editor-column ${active.mode === 'source' ? 'source-editor-column' : 'live-editor-column'}`}><Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} documentId={active.id} documentPath={active.path} source={active.source} mode={active.mode} searchQuery={query} onRequestLink={requestLinkEditor} onChange={updateSource} onImageFiles={files => { void insertImages(files); }} /></Suspense></div></div>
+          {imageFailed && <div className="image-notice" role="status"><span>{t('imageUnavailable')}</span><button onClick={() => void allowImageFolder()}>{t('allowImageFolder')}</button><button onClick={() => setFileRefresh(value => value + 1)}>{t('retry')}</button></div>}
+          <div ref={editorScrollRef} className={`editor-scroll ${active.mode === 'source' ? 'source-mode-scroll' : ''}`}><div className={`editor-column ${active.mode === 'source' ? 'source-editor-column' : 'live-editor-column'}`}><Suspense fallback={<div className="editor-loading">Loading editor…</div>}><CodeMirrorEditor ref={editorRef} documentId={active.id} documentPath={active.path} source={active.source} mode={active.mode} searchQuery={query} onRequestLink={requestLinkEditor} onChange={updateSource} onDocumentChange={updateDocumentSource} assetRoots={rootsFor(active)} assetRefresh={fileRefresh} onImageError={setImageFailed} onImageFiles={files => { void insertImages(files); }} /></Suspense></div></div>
           <footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className={`status-mode-option ${active.mode === 'source' ? 'selected' : ''}`} title={t('source')} aria-label={t('source')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'source' } : item))}><Code2 size={14} /></button><button className={`status-mode-option ${active.mode === 'live' ? 'selected' : ''}`} title={t('preview')} aria-label={t('preview')} onClick={() => setDocuments(current => current.map(item => item.id === active.id ? { ...item, mode: 'live' } : item))}><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>{wordCount(active.source).toLocaleString()} {t('words')}</span><span>{active.revision ? 'UTF-8' : 'Local'}</span><span className={active.dirty ? 'status-dirty' : ''}>{active.dirty ? t('unsaved') : t('saved')}</span></div></footer>
         </> : <><div className="empty-state"><div className="empty-icon"><PanelLeft size={25} /></div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p><button className="primary-command" onClick={newDocument}><Plus size={16} />{t('newDocument')}</button><button className="secondary-command" onClick={() => void chooseDocument()}><FolderOpen size={16} />{t('open')}</button></div><footer className="statusbar"><div className="statusbar-left"><button className="status-button" title={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} aria-label={sidebarIsVisible ? t('hideSidebar') : t('showSidebar')} onClick={toggleSidebar}><PanelLeft size={14} /></button><div className="status-mode-switch" role="group" aria-label={`${t('source')} / ${t('preview')}`}><button className="status-mode-option" title={t('source')} aria-label={t('source')} disabled><Code2 size={14} /></button><button className="status-mode-option" title={t('preview')} aria-label={t('preview')} disabled><Eye size={14} /></button></div><button className="status-button" title={focusMode ? t('exitFocus') : t('focusMode')} aria-label={focusMode ? t('exitFocus') : t('focusMode')} onClick={() => setFocusMode(current => !current)}><Focus size={14} /></button></div><div className="statusbar-right"><span>0 {t('words')}</span><span>Local</span><span>{t('saved')}</span></div></footer></>}
       </main>
     </div>
+    {imagePreview && <div className="modal-backdrop" onClick={() => setImagePreview(null)}><section className="image-preview-modal" role="dialog" aria-modal="true" aria-label={t('imagePreview')} onClick={event => event.stopPropagation()}><header><strong>{basename(imagePreview.path)}</strong><button className="icon-button" aria-label={t('cancel')} onClick={() => setImagePreview(null)}><X size={18} /></button></header><img src={imagePreview.url} alt={basename(imagePreview.path)} /><footer><button className="primary-command" disabled={!active} onClick={() => { void insertImages([], imagePreview.path); setImagePreview(null); }}>{t('insertIntoDocument')}</button></footer></section></div>}
     {showSettings && <div className="modal-backdrop" onClick={() => setShowSettings(false)}><section className="settings-modal" onClick={event => event.stopPropagation()}><header><h2>{t('settings')}</h2><button className="icon-button" title="Close" aria-label="Close" onClick={() => setShowSettings(false)}><X size={18} /></button></header><div className="settings-row"><span>{t('language')}</span><button className="secondary-command" onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}>{locale === 'zh-CN' ? t('chinese') : t('english')}</button></div><div className="settings-row"><span>{t('theme')}</span><select className="settings-select" value={theme} onChange={event => setTheme(event.target.value as Theme)}><option value="system">{t('themeSystem')}</option><option value="light">{t('themeLight')}</option><option value="dark">{t('themeDark')}</option></select></div><div className="settings-section editor-settings"><div className="settings-section-heading"><strong>{t('editorAppearance')}</strong></div><label className="settings-control"><span>{t('editorFont')}</span><select className="settings-select" value={editorFont} onChange={event => setEditorFont(event.target.value as EditorFont)}><option value="system">{t('fontSystem')}</option><option value="noto">{t('fontNoto')}</option><option value="sarasa">{t('fontSarasa')}</option><option value="jetbrains">{t('fontJetBrains')}</option></select></label><label className="settings-control"><span>{t('editorFontSize')}</span><span className="settings-range"><input type="range" min="12" max="24" step="1" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} /><output>{editorFontSize}px</output></span></label><label className="settings-control"><span>{t('editorWidth')}</span><span className="settings-range"><input aria-label={t('editorWidth')} type="range" min="720" max="1600" step="40" value={editorWidth} onChange={event => setEditorWidth(Number(event.target.value))} /><output>{editorWidth}px</output></span></label></div><div className="settings-section"><div className="settings-section-heading"><strong>{t('plugins')}</strong><button className="secondary-command" onClick={() => void choosePlugin()}><Upload size={14} />{t('installPlugin')}</button><input ref={pluginInputRef} hidden type="file" accept=".markit-plugin" onChange={event => { const file = event.target.files?.[0]; if (file) void file.arrayBuffer().then(bytes => installPlugin(new Uint8Array(bytes))); event.currentTarget.value = ''; }} /></div>{pluginError && <p className="plugin-error">{t('pluginInstallError')}: {pluginError}</p>}{plugins.length ? <div className="plugin-list">{plugins.map(plugin => <article className="plugin-row" key={plugin.manifest.id}><div className="plugin-info"><strong>{plugin.manifest.name}</strong><span>{plugin.manifest.id} · v{plugin.manifest.version}</span><small>{t('pluginPermissions')}: {plugin.manifest.permissions.length ? plugin.manifest.permissions.join(', ') : 'none'}</small></div><div className="plugin-actions">{(plugin.integrityVerified || plugin.signaturePresent) && <span title={plugin.integrityVerified ? t('pluginIntegrity') : t('pluginUnsigned')}><ShieldCheck size={14} /></span>}<button className="icon-button" title={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} aria-label={plugin.enabled ? t('disablePlugin') : t('enablePlugin')} onClick={() => togglePlugin(plugin)}><span className={`plugin-toggle ${plugin.enabled ? 'enabled' : ''}`} /></button><button className="icon-button" title={t('removePlugin')} aria-label={t('removePlugin')} onClick={() => removePlugin(plugin)}><Trash2 size={14} /></button></div></article>)}</div> : <p className="empty-sidebar">{t('noPlugins')}</p>}</div></section></div>}
     {showAbout && <div className="modal-backdrop" onClick={() => setShowAbout(false)}><section className="about-modal" role="dialog" aria-modal="true" aria-labelledby="about-title" data-testid="about-dialog" onClick={event => event.stopPropagation()}><button className="icon-button about-close" title="Close" aria-label="Close" onClick={() => setShowAbout(false)}><X size={18} /></button><div className="about-mark" aria-hidden="true">M</div><h2 id="about-title">Markit</h2><p className="about-description">{t('appDescription')}</p><p className="about-version">v{appVersion}</p><p className="about-license">{t('license')}</p></section></div>}
-    {pngExporting && active && <div className="png-export-render" aria-hidden="true"><Suspense fallback={null}><ProseMirrorEditor source={active.source} documentPath={active.path} citationMap={citationMap} onChange={() => undefined} /></Suspense></div>}
+    {pngExporting && pngSource !== null && <div className="png-export-render" aria-hidden="true"><Suspense fallback={null}><ProseMirrorEditor source={pngSource} documentPath={null} citationMap={citationMap} onChange={() => undefined} /></Suspense></div>}
     {pendingClose && <div className="modal-backdrop" data-testid="close-confirm" onClick={() => setPendingClose(null)}><section className="close-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="close-unsaved-title" onClick={event => event.stopPropagation()}><header><h2 id="close-unsaved-title">{t('closeUnsavedTitle')}</h2><button className="icon-button" title={t('cancel')} aria-label={t('cancel')} onClick={() => setPendingClose(null)}><X size={18} /></button></header><p className="close-confirm-body">{pendingClose.windowClose ? t('closeWindowUnsavedBody') : t('closeUnsavedBody').replace('{title}', pendingClose.title)}</p><footer className="close-confirm-actions"><button className="secondary-command" onClick={() => discardAndCloseDocument()}>{t('discardChanges')}</button><button className="secondary-command" onClick={() => setPendingClose(null)}>{t('cancel')}</button><button className="primary-command" onClick={() => void saveAndCloseDocument()}>{t('saveAndClose')}</button></footer></section></div>}
     {linkEditor && <div className="modal-backdrop" onClick={() => resolveLinkEditor(null)}><section className="link-editor-modal" role="dialog" aria-modal="true" aria-labelledby="link-editor-title" onClick={event => event.stopPropagation()}><header><h2 id="link-editor-title">{t('linkEditorTitle')}</h2><button className="icon-button" title={t('cancel')} aria-label={t('cancel')} onClick={() => resolveLinkEditor(null)}><X size={18} /></button></header><label className="link-editor-field"><span>{t('linkURL')}</span><input autoFocus value={linkEditorValue} onChange={event => setLinkEditorValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); resolveLinkEditor(linkEditorValue); } if (event.key === 'Escape') { event.preventDefault(); resolveLinkEditor(null); } }} /></label><footer className="link-editor-actions"><button className="secondary-command" onClick={() => resolveLinkEditor(null)}>{t('cancel')}</button><button className="primary-command" onClick={() => resolveLinkEditor(linkEditorValue)}>{t('apply')}</button></footer></section></div>}
     {errorMessage && <div className="error-toast" role="alert"><div className="error-toast-content"><strong>{t('errorTitle')}</strong><span>{errorMessage}</span></div><button className="icon-button" title={t('closeError')} aria-label={t('closeError')} onClick={dismissError}><X size={16} /></button></div>}

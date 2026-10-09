@@ -27,7 +27,8 @@ npx playwright install --with-deps chromium
 | 测试入口 | 内容 |
 | --- | --- |
 | `tests/` | Markdown、编辑模型、文件服务、插件契约及历史 Electron 模块 |
-| `scripts/smoke-tauri-frontend.mjs` | 编辑、模式切换、搜索、表格、选区、主题和文稿关闭 |
+| `scripts/smoke-tauri-frontend.mjs` | 编辑、模式切换、搜索、表格、选区、主题和文稿关闭，以及下列文稿 / 项目流程 |
+| `scripts/check-document-workspace.mjs` | 模拟原生命令验证启动文件、独立文稿 / 项目切换、异步插图、另存为失败及成功、HTML 图片嵌入、ZIP 解压内容与项目恢复 |
 | `scripts/check-window-close.mjs` | 带权限检查的 Tauri 关闭流程：正常关闭、取消、保存、丢弃及错误提示 |
 | `apps/desktop/src-tauri/src/lib.rs` | Rust 文件处理和服务测试 |
 
@@ -43,7 +44,10 @@ npx playwright install --with-deps chromium
 4. 分别关闭已保存文稿和含未保存修改的窗口，检查取消、丢弃、保存并关闭；保存失败或取消保存时窗口应保持打开。
 5. 导出 HTML、打印 / PDF 和 PNG，检查内容与排版。
 6. 安装 Citations 插件，连接本机 Zotero，检索条目并生成参考文献。
-7. 检查安装、再次启动和卸载。
+7. 单独打开文稿后确认没有项目树；打开项目、展开子目录，再打开项目外文件，确认根目录不变。
+8. 新文稿粘贴图片，取消和完成首次保存；检查 `.assets` 目录和相对路径。导入期间编辑文字、切换标签，核对图片归属。
+9. 另存为、HTML 和 ZIP 导出包含共享图片的文稿；移动副本 / 解压目录后重新打开，确认图片可用，原文稿和原图片不变。
+10. 从系统文件管理器分别在应用未运行、已运行时打开 Markdown；检查安装、再次启动和卸载。
 
 报告问题时记录版本、操作系统、操作步骤、预期与实际结果，并附上可共享的示例文稿。
 

@@ -1,3 +1,4 @@
+import { imageReferences, localImagePath, rewriteImages } from './markdown-assets';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -19,11 +20,10 @@ export interface LiveEditorHandle {
   insertMarkdown?: (markdown: string) => void;
 }
 
-interface Props { source: string; documentPath: string | null; citationMap?: Record<string, number>; searchQuery?: string; onRequestLink?(currentHref: string): Promise<string | null>; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
+interface Props { source: string; documentPath: string | null; assetRoots?: string[]; citationMap?: Record<string, number>; searchQuery?: string; onRequestLink?(currentHref: string): Promise<string | null>; onChange(source: string): void; onImageFiles?(files: File[], position?: number): void }
 
 interface Projection { source: string; mappings: Map<string, string> }
 
-const imagePattern = /!\[[^\]]*\]\((?:<([^>\n]+)>|([^\s)\n]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g;
 const citationPattern = /\[(?:@[A-Z0-9]{8})(?:\s*;\s*@[A-Z0-9]{8})*\]/gu;
 
 function markInputRule(regexp: RegExp, markType: MarkType | MarkType[]): InputRule {
@@ -334,29 +334,20 @@ export function createLiveInputRules(schema: typeof markdownParser['schema']) {
   ];
 }
 
-async function projectImages(source: string, documentPath: string | null): Promise<Projection> {
+async function projectImages(source: string, documentPath: string | null, roots: string[]): Promise<Projection> {
   const mappings = new Map<string, string>();
   if (!documentPath) return { source, mappings };
-  const matches = [...source.matchAll(imagePattern)];
-  let projected = source;
-  for (const match of matches.reverse()) {
-    const original = match[1] || match[2];
-    const start = match.index;
-    if (!original || start === undefined || /^(?:[a-z][a-z\d+.-]*:|#)/i.test(original)) continue;
-    let relative = original;
-    try { relative = decodeURIComponent(original); } catch { /* Preserve malformed URLs for the source editor. */ }
+  const replacements = new Map<string, string>();
+  for (const ref of imageReferences(source)) {
     try {
-      const url = await registerAsset(documentPath, relative);
-      const destinationStart = match[0].indexOf('](');
-      const sourceOffset = match[0].indexOf(original, destinationStart + 2);
-      if (sourceOffset < 0) continue;
-      const absoluteOffset = start + sourceOffset;
-      projected = `${projected.slice(0, absoluteOffset)}${url}${projected.slice(absoluteOffset + original.length)}`;
-      mappings.set(url, original);
-    } catch {
-      // A missing image should remain an editable relative Markdown path.
-    }
+      const relative = localImagePath(ref.destination);
+      if (!relative) continue;
+      const url = await registerAsset(documentPath, relative, roots);
+      replacements.set(ref.destination, url);
+      mappings.set(url, ref.destination);
+    } catch { /* Keep missing images editable. */ }
   }
+  const projected = rewriteImages(source, replacements);
   return { source: projected, mappings };
 }
 
@@ -366,7 +357,7 @@ function restoreImages(source: string, mappings: Map<string, string>): string {
   return restored;
 }
 
-export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, citationMap = {}, searchQuery = '', onRequestLink, onChange, onImageFiles }, ref) {
+export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function ProseMirrorEditor({ source, documentPath, assetRoots = [], citationMap = {}, searchQuery = '', onRequestLink, onChange, onImageFiles }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const sourceRef = useRef(source);
@@ -511,7 +502,7 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
     const editor = view.current;
     if (!editor || editor.hasFocus() || (source === projectionRef.current.source && documentPath === projectionRef.current.documentPath)) return;
     let cancelled = false;
-    void projectImages(source, documentPath).then(projection => {
+    void projectImages(source, documentPath, assetRoots).then(projection => {
       if (cancelled || !view.current || editor.hasFocus()) return;
       try {
         const next = markdownParser.parse(projection.source);
@@ -521,7 +512,7 @@ export const ProseMirrorEditor = forwardRef<LiveEditorHandle, Props>(function Pr
       } catch { /* Keep the current semantic projection until the source is valid. */ }
     });
     return () => { cancelled = true; };
-  }, [source, documentPath]);
+  }, [source, documentPath, JSON.stringify(assetRoots)]);
 
   return <div ref={host} className="pm-editor" aria-label="Markdown editor" />;
 });

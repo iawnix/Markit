@@ -2,6 +2,7 @@ import type { Locale } from './contracts';
 
 const messages = {
   'zh-CN': {
+    openDocuments: '已打开文稿', openProject: '打开文件夹…', closeProject: '关闭项目', project: '项目文件', refresh: '刷新', loading: '正在加载…', emptyFolder: '空文件夹', retry: '重试', saveAs: '另存为…', exportZip: '打包导出 ZIP', insertIntoDocument: '插入当前文稿', imagePreview: '图片预览', imageUnavailable: '部分图片无法读取，请检查路径；如图片在文稿目录之外，可选择其所在文件夹以允许访问。', allowImageFolder: '允许访问图片文件夹…', saveForImages: '先保存文稿，以确定图片存放位置', resourceBusy: '正在处理文稿附件，请稍候再关闭。',
     files: '文件', outline: '大纲', search: '搜索', menu: '菜单', closeMenu: '关闭菜单', newDocument: '新建文稿', open: '打开', image: '插入图片', about: '关于 Markit', appDescription: '轻量级 Markdown 编辑器', license: 'MIT 许可证',
     save: '保存', exportHtml: '导出 HTML', exportPng: '导出 PNG 长图', printPdf: '打印 / 导出 PDF', source: '源码', live: '即时排版', preview: '预览', settings: '设置', untitled: '未命名文稿', externalChange: '文件已被其他程序修改。重新加载会丢弃当前未保存内容。', reload: '重新加载', recoveryFound: '发现上次未正常关闭时保留的未保存文稿。是否恢复？',
     emptyTitle: '开始写作', emptyBody: '打开一个 Markdown 文件，或创建一份新的文稿。', focusMode: '专注模式', exitFocus: '退出专注模式', showSidebar: '显示侧栏', hideSidebar: '隐藏侧栏',
@@ -12,6 +13,7 @@ const messages = {
     tableInsertRowAbove: '在上方插入行', tableInsertRowBelow: '在下方插入行', tableDeleteRow: '删除行', tableInsertColumnLeft: '在左侧插入列', tableInsertColumnRight: '在右侧插入列', tableDeleteColumn: '删除列',
   },
   en: {
+    openDocuments: 'Open documents', openProject: 'Open folder…', closeProject: 'Close project', project: 'Project files', refresh: 'Refresh', loading: 'Loading…', emptyFolder: 'Empty folder', retry: 'Retry', saveAs: 'Save as…', exportZip: 'Export ZIP bundle', insertIntoDocument: 'Insert into document', imagePreview: 'Image preview', imageUnavailable: 'Some images could not be read. Check their paths, or choose their containing folder to allow access outside this document folder.', allowImageFolder: 'Allow image folder…', saveForImages: 'Save the document first to choose where images will be stored', resourceBusy: 'Document attachments are being processed. Please wait before closing.',
     files: 'Files', outline: 'Outline', search: 'Search', menu: 'Menu', closeMenu: 'Close menu', newDocument: 'New document', open: 'Open', image: 'Image', about: 'About Markit', appDescription: 'A lightweight Markdown editor', license: 'MIT License',
     save: 'Save', exportHtml: 'Export HTML', exportPng: 'Export PNG long image', printPdf: 'Print / export PDF', source: 'Source', live: 'Live', preview: 'Preview', settings: 'Settings', untitled: 'Untitled document', externalChange: 'This file changed outside Markit. Reloading discards unsaved changes.', reload: 'Reload', recoveryFound: 'Unsaved documents from the last session were found. Restore them?',
     emptyTitle: 'Start writing', emptyBody: 'Open a Markdown file or create a new document.', focusMode: 'Focus mode', exitFocus: 'Exit focus mode', showSidebar: 'Show sidebar', hideSidebar: 'Hide sidebar',

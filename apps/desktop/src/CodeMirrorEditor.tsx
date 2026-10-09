@@ -8,6 +8,7 @@ import { Decoration, EditorView, keymap, MatchDecorator, ViewPlugin } from '@cod
 import { createLivePreviewExtension, externalLinkAt, moveToTableCell, pasteTableCells, refreshLivePreview } from './live-preview';
 import { editorHighlightStyle } from './editor-highlighting';
 import { codeLanguageForFence } from './markdown-code-languages';
+import { imageReferences, localImagePath } from './markdown-assets';
 import { openExternalUrl, registerAsset } from './bridge';
 
 export interface SourceEditorHandle {
@@ -15,6 +16,7 @@ export interface SourceEditorHandle {
   setSelection(position: number): void;
   getSelectionStart(): number;
   insertMarkdown(markdown: string): void;
+  captureInsertion(): { insert(text: string): void; cancel(): void };
 }
 
 interface Props {
@@ -26,6 +28,10 @@ interface Props {
   onRequestLink?(currentHref: string): Promise<string | null>;
   onChange(source: string): void;
   onImageFiles?(files: File[]): void;
+  onDocumentChange?(id: string, source: string): void;
+  assetRoots?: string[];
+  assetRefresh?: number;
+  onImageError?(failed: boolean): void;
 }
 
 function wrapMarkdown(open: string, close: string): StateCommand {
@@ -46,10 +52,13 @@ function wrapMarkdown(open: string, close: string): StateCommand {
   };
 }
 
-export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function CodeMirrorEditor({ documentId, documentPath, source, mode, searchQuery = '', onRequestLink, onChange, onImageFiles }, ref) {
+export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function CodeMirrorEditor({ documentId, documentPath, source, mode, searchQuery = '', onRequestLink, onChange, onImageFiles, onDocumentChange, assetRoots = [], assetRefresh = 0, onImageError }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
+  const onDocumentChangeRef = useRef(onDocumentChange);
+  onDocumentChangeRef.current = onDocumentChange;
+  const pendingInsertions = useRef(new Map<string, { id: string; position: number }>());
   const onRequestLinkRef = useRef(onRequestLink);
   const onImageFilesRef = useRef(onImageFiles);
   const searchQueryRef = useRef(searchQuery);
@@ -59,7 +68,7 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
   const syncingRef = useRef(false);
   const statesRef = useRef(new Map<string, EditorState>());
   const imageUrlsRef = useRef(new Map<string, string>());
-  const imageRequestsRef = useRef(new Set<string>());
+  const imageScopeRef = useRef('');
   const previewCompartmentRef = useRef(new Compartment());
   const extensionsRef = useRef<Extension[] | null>(null);
   onChangeRef.current = onChange;
@@ -77,6 +86,30 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
       view.focus();
     },
     getSelectionStart() { return viewRef.current?.state.selection.main.head || 0; },
+    captureInsertion() {
+      const token = crypto.randomUUID();
+      pendingInsertions.current.set(token, { id: currentDocumentIdRef.current, position: viewRef.current?.state.selection.main.head || 0 });
+      return {
+        cancel() { pendingInsertions.current.delete(token); },
+        insert(text) {
+          const pending = pendingInsertions.current.get(token);
+          pendingInsertions.current.delete(token);
+          if (!pending) return;
+          const view = viewRef.current;
+          const state = pending.id === currentDocumentIdRef.current ? view?.state : statesRef.current.get(pending.id);
+          if (!state) return;
+          const position = Math.min(pending.position, state.doc.length);
+          const insertion = (position && state.doc.sliceString(position - 1, position) !== '\n' ? '\n' : '') + text + '\n';
+          const transaction = state.update({ changes: { from: position, insert: insertion }, selection: { anchor: position + insertion.length } });
+          if (view && currentDocumentIdRef.current === pending.id) view.dispatch(transaction);
+          else {
+            for (const other of pendingInsertions.current.values()) if (other.id === pending.id) other.position = transaction.changes.mapPos(other.position, 1);
+            statesRef.current.set(pending.id, transaction.state);
+            onDocumentChangeRef.current?.(pending.id, transaction.state.doc.toString());
+          }
+        },
+      };
+    },
     insertMarkdown(markdownText) {
       const view = viewRef.current;
       if (!view || !markdownText) return;
@@ -174,10 +207,12 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
           onImageFilesRef.current(files);
           return true;
         },
-        drop(event) {
+        drop(event, view) {
           const files = Array.from(event.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'));
           if (!files.length || !onImageFilesRef.current) return false;
           event.preventDefault();
+          const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (position !== null) view.dispatch({ selection: { anchor: position } });
           onImageFilesRef.current(files);
           return true;
         },
@@ -187,6 +222,7 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
         },
       }),
       EditorView.updateListener.of(update => {
+        for (const pending of pendingInsertions.current.values()) if (pending.id === currentDocumentIdRef.current) pending.position = update.changes.mapPos(pending.position, 1);
         statesRef.current.set(currentDocumentIdRef.current, update.state);
         if (update.docChanged && !syncingRef.current) onChangeRef.current(update.state.doc.toString());
       }),
@@ -237,24 +273,32 @@ export const CodeMirrorEditor = forwardRef<SourceEditorHandle, Props>(function C
     }
   }, [documentId, documentPath, source, mode]);
 
+  const rootsKey = JSON.stringify(assetRoots);
   useEffect(() => {
-    if (!documentPath) return;
-    const pattern = /!\[[^\]]*\]\((?:<([^>\n]+)>|([^\s)\n]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g;
-    for (const match of source.matchAll(pattern)) {
-      const original = match[1] || match[2];
-      if (!original || /^(?:[a-z][a-z\d+.-]*:|#)/i.test(original)) continue;
-      let relative = original;
-      try { relative = decodeURIComponent(original); } catch { /* Leave malformed paths in Markdown. */ }
-      const key = `${documentPath}\0${relative}`;
-      if (imageUrlsRef.current.has(key) || imageRequestsRef.current.has(key)) continue;
-      imageRequestsRef.current.add(key);
-      void registerAsset(documentPath, relative).then(url => {
-        imageUrlsRef.current.set(key, url);
-        const editor = viewRef.current;
-        if (editor) editor.dispatch({ effects: refreshLivePreview.of(undefined) });
-      }).catch(() => undefined).finally(() => imageRequestsRef.current.delete(key));
-    }
-  }, [documentPath, source]);
+    let cancelled = false;
+    if (!documentPath) { onImageError?.(false); return; }
+    const roots: string[] = JSON.parse(rootsKey);
+    // A scope change invalidates previews that were authorized by the previous project.
+    const scope = `${rootsKey}:${assetRefresh}`;
+    if (imageScopeRef.current !== scope) { imageUrlsRef.current.clear(); imageScopeRef.current = scope; }
+    const refs = [...new Set(imageReferences(source).map(ref => ref.destination))];
+    void Promise.all(refs.map(async destination => {
+      let relative: string | null;
+      try { relative = localImagePath(destination); } catch { return true; }
+      if (!relative) return false;
+      try {
+        if (imageUrlsRef.current.has(`${documentPath}\0${relative}`)) return false;
+        const url = await registerAsset(documentPath, relative, roots);
+        if (!cancelled) imageUrlsRef.current.set(`${documentPath}\0${relative}`, url);
+        return false;
+      } catch { return true; }
+    })).then(failures => {
+      if (cancelled) return;
+      viewRef.current?.dispatch({ effects: refreshLivePreview.of(undefined) });
+      onImageError?.(failures.some(Boolean));
+    });
+    return () => { cancelled = true; };
+  }, [documentPath, source, rootsKey, assetRefresh]);
 
   useEffect(() => {
     const editor = viewRef.current;

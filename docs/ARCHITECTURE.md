@@ -64,3 +64,26 @@ See [Development](../resources/Development.md) for dependencies, commands and
 release steps, and [Testing](../resources/Validation.md) for automated and
 manual checks. Release artifacts are built by GitHub Actions on each target
 operating system. Linux uses WebKitGTK 4.1 and GTK3.
+
+## Project browsing and document resources
+
+`projectRoot` is optional and independent of document paths. Opening a file never
+sets the project root. `FilesPanel` renders open documents and a lazily loaded
+project tree, preserving manual expansion and refreshing on focus or file writes.
+Project selection is persisted separately from unsaved-document recovery.
+
+`document-paths` handles native paths and Markdown URL encoding. `markdown-assets`
+uses the Markdown syntax tree to locate inline and reference images, excluding
+code examples. Copies rewrite only image occurrences, preserving shared reference
+definitions and non-image links. `document-resources` prepares portable copies
+and embedded HTML images. ZIP exports use the same prepared copy.
+
+The Rust resource service resolves canonical paths against the document directory,
+explicit project root and document-specific folder grants, including symlink checks.
+New imported assets go into `<document-stem>.assets/`. Batches are validated before
+writing, filenames are unique, and failed writes or failed copy saves roll back
+new files. Ordinary saves never reorganize or delete existing assets.
+
+CodeMirror captures image insertion positions and maps them through subsequent
+transactions. Pending insertions retain their original document ID across tab
+switches. Closing a document or window waits for resource operations to finish.

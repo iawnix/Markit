@@ -1,4 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
+import { assetFolder, encodeImagePath } from './document-paths';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { DirectoryEntry, DocumentSnapshot, FileRevision, ImageInput, OutlineEntry, RecoveryDocument } from './contracts';
 
@@ -81,9 +82,10 @@ export async function exportPng(path: string, bytes: Uint8Array): Promise<void> 
   await invoke('export_png', { path, bytes: [...bytes] });
 }
 
-export async function registerAsset(documentPath: string, relativePath: string): Promise<string> {
+export async function registerAsset(documentPath: string, relativePath: string, roots: string[] = []): Promise<string> {
   if (!isTauriRuntime) return relativePath;
-  return invoke<string>('register_asset', { documentPath, relativePath });
+  const url = await invoke<string>('register_asset', { documentPath, relativePath, roots });
+  return url.startsWith('markit-asset://localhost/') ? convertFileSrc(url.slice('markit-asset://localhost/'.length), 'markit-asset') : url;
 }
 
 export async function listDirectory(path: string): Promise<DirectoryEntry[]> {
@@ -96,9 +98,9 @@ export async function outline(source: string): Promise<OutlineEntry[]> {
   return invoke<OutlineEntry[]>('extract_outline', { source });
 }
 
-export async function importImages(documentPath: string, inputs: ImageInput[], folder = 'assets'): Promise<string[]> {
+export async function importImages(documentPath: string, inputs: ImageInput[], folder = assetFolder(documentPath)): Promise<string[]> {
   if (!isTauriRuntime) return fallback(inputs.map(input => `${folder}/${input.name}`));
-  return invoke<string[]>('import_images', { documentPath, folder, inputs });
+  return (await invoke<string[]>('import_images', { documentPath, folder, inputs })).map(encodeImagePath);
 }
 
 export async function readPluginPackage(path: string): Promise<number[]> {
@@ -113,4 +115,27 @@ export function parseOutline(source: string): OutlineEntry[] {
     result.push({ id: `heading-${result.length}`, text, level: match[1].length, offset: match.index ?? 0 });
   }
   return result;
+}
+
+export interface AssetFile { relativePath: string; bytes: number[] }
+export interface ImageData { name: string; bytes: number[]; mime: string }
+export async function readImage(documentPath: string, relativePath: string, roots: string[]): Promise<ImageData> {
+  return invoke<ImageData>('read_image', { documentPath, relativePath, roots });
+}
+export async function saveDocumentCopy(path: string, source: string, assets: AssetFile[], expected: FileRevision | null, bom: boolean, lineEnding: 'LF' | 'CRLF'): Promise<FileRevision> {
+  return invoke<FileRevision>('save_document_copy', { path, source, assets, expected, bom, lineEnding });
+}
+export async function exportZip(path: string, bytes: Uint8Array): Promise<void> {
+  await invoke('export_zip', { path, bytes: [...bytes] });
+}
+export async function openResource(path: string): Promise<void> {
+  await invoke('open_resource', { path });
+}
+
+export async function optionalFileRevision(path: string): Promise<FileRevision | null> {
+  return invoke<FileRevision | null>('optional_file_revision', { path });
+}
+
+export async function takeOpenPaths(): Promise<string[]> {
+  return (await invoke<string[]>('take_open_paths')) || [];
 }

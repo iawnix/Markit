@@ -1,3 +1,5 @@
+mod resources;
+use resources::{export_zip, optional_file_revision, read_image, save_document_copy};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -5,7 +7,7 @@ use std::{
     fs,
     io::{Cursor, Write},
     path::{Component, Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::UNIX_EPOCH,
 };
 use tauri::{
@@ -22,6 +24,43 @@ const MAX_PLUGIN_PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_RECOVERY_BYTES: usize = 64 * 1024 * 1024;
 
 type AssetStore = Arc<RwLock<HashMap<String, PathBuf>>>;
+
+#[derive(Default)]
+struct PendingOpenPaths(Mutex<Vec<String>>);
+
+fn queue_open_paths(app: &AppHandle, paths: impl Iterator<Item = PathBuf>) {
+    let state = app.state::<PendingOpenPaths>();
+    if let Ok(mut pending) = state.0.lock() {
+        for path in paths {
+            if !path.extension().is_some_and(|extension| {
+                ["md", "markdown", "mdown", "mkd", "txt"]
+                    .iter()
+                    .any(|kind| extension.eq_ignore_ascii_case(kind))
+            }) {
+                continue;
+            }
+            if let Ok(path) = fs::canonicalize(path) {
+                let path = path.to_string_lossy().into_owned();
+                #[cfg(windows)]
+                let path = if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+                    format!(r"\\{}", unc)
+                } else {
+                    path.strip_prefix(r"\\?\").unwrap_or(&path).to_string()
+                };
+                if pending.len() < 100 && !pending.contains(&path) {
+                    pending.push(path);
+                }
+            }
+        }
+    };
+    let _ = app.emit("open-file", "");
+}
+
+#[tauri::command]
+fn take_open_paths(paths: State<'_, PendingOpenPaths>) -> Result<Vec<String>, String> {
+    let mut pending = paths.0.lock().map_err(|error| error.to_string())?;
+    Ok(std::mem::take(&mut *pending))
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -386,30 +425,10 @@ fn register_asset(
     document_path: String,
     relative_path: String,
     assets: State<'_, AssetStore>,
+    roots: Option<Vec<String>>,
 ) -> Result<String, String> {
     let document = validate_local_path(&document_path)?;
-    let relative = Path::new(relative_path.trim());
-    if relative.as_os_str().is_empty()
-        || relative.is_absolute()
-        || relative.components().any(|component| {
-            matches!(
-                component,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        })
-    {
-        return Err("Image paths must stay inside the document directory".into());
-    }
-    let parent = document.parent().ok_or("Document has no parent folder")?;
-    let canonical_parent = fs::canonicalize(parent).map_err(|error| error.to_string())?;
-    let target = fs::canonicalize(parent.join(relative)).map_err(|error| error.to_string())?;
-    if !target.starts_with(&canonical_parent) || !target.is_file() {
-        return Err("Image path is outside the document directory or does not exist".into());
-    }
-    let metadata = fs::metadata(&target).map_err(|error| error.to_string())?;
-    if metadata.len() > MAX_IMAGE_BYTES as u64 {
-        return Err("Image exceeds the 64 MiB limit".into());
-    }
+    let target = resources::resolve_asset(&document, &relative_path, &roots.unwrap_or_default())?;
     let token = Uuid::new_v4().simple().to_string();
     let mut store = assets
         .write()
@@ -430,7 +449,8 @@ fn list_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
         .filter_map(|entry| {
             let metadata = entry.metadata().ok()?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
+            if name.starts_with('.') || (metadata.is_dir() && entry.file_type().ok()?.is_symlink())
+            {
                 return None;
             }
             Some(DirectoryEntry {
@@ -497,77 +517,7 @@ fn import_images(
     inputs: Vec<ImageInput>,
 ) -> Result<Vec<String>, String> {
     let document = validate_local_path(&document_path)?;
-    if inputs.is_empty() || inputs.len() > 100 {
-        return Err("Select between 1 and 100 images".into());
-    }
-    let total: usize = inputs.iter().map(|input| input.bytes.len()).sum();
-    if total > 256 * 1024 * 1024
-        || inputs
-            .iter()
-            .any(|input| input.bytes.len() > MAX_IMAGE_BYTES)
-    {
-        return Err("Images are limited to 64 MiB each and 256 MiB per batch".into());
-    }
-    let folder = folder.trim();
-    let assets = asset_directory(&document, folder)?;
-    let mut destinations = Vec::new();
-    for input in inputs {
-        let reader = image::ImageReader::new(std::io::Cursor::new(&input.bytes))
-            .with_guessed_format()
-            .map_err(|error| error.to_string())?;
-        let dimensions = reader
-            .into_dimensions()
-            .map_err(|error| error.to_string())?;
-        if (dimensions.0 as u64) * (dimensions.1 as u64) > MAX_IMAGE_PIXELS {
-            return Err("Image exceeds the pixel limit".into());
-        }
-        let stem = input
-            .name
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or("image")
-            .rsplit_once('.')
-            .map(|pair| pair.0)
-            .unwrap_or("image")
-            .chars()
-            .map(|character| {
-                if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
-                    character
-                } else {
-                    '-'
-                }
-            })
-            .collect::<String>();
-        let extension = input
-            .name
-            .rsplit_once('.')
-            .map(|pair| pair.1.to_ascii_lowercase())
-            .filter(|extension| {
-                matches!(
-                    extension.as_str(),
-                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "tif" | "tiff" | "avif"
-                )
-            })
-            .unwrap_or_else(|| "png".into());
-        let filename = format!(
-            "{}-{}.{}",
-            if stem.is_empty() { "image" } else { &stem },
-            &Uuid::new_v4().to_string()[..12],
-            extension
-        );
-        let target = assets.join(&filename);
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&target)
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = file.write_all(&input.bytes).and_then(|_| file.sync_all()) {
-            let _ = fs::remove_file(&target);
-            return Err(error.to_string());
-        }
-        destinations.push(format!("{}/{}", folder.replace('\\', "/"), filename));
-    }
-    Ok(destinations)
+    resources::import(&document, folder.trim(), inputs)
 }
 
 #[tauri::command]
@@ -588,11 +538,21 @@ fn read_plugin_package(path: String) -> Result<Vec<u8>, String> {
     fs::read(&path).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn open_resource(app: AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = validate_local_path(&path)?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|error| error.to_string())
+}
+
 pub fn run() {
     let assets: AssetStore = Arc::new(RwLock::new(HashMap::new()));
     let protocol_assets = Arc::clone(&assets);
     tauri::Builder::default()
         .manage(assets)
+        .manage(PendingOpenPaths::default())
         .register_uri_scheme_protocol("markit-asset", move |_context, request| {
             let token = request.uri().path().trim_start_matches('/');
             let path = protocol_assets
@@ -616,20 +576,19 @@ pub fn run() {
                     .unwrap(),
             }
         })
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            if let Some(path) = argv.into_iter().skip(1).find(|value| {
-                value.ends_with(".md")
-                    || value.ends_with(".markdown")
-                    || value.ends_with(".mdown")
-                    || value.ends_with(".mkd")
-            }) {
-                let _ = app.emit("open-file", path);
-            }
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            queue_open_paths(
+                app,
+                argv.into_iter()
+                    .skip(1)
+                    .map(|path| Path::new(&cwd).join(path)),
+            );
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             read_document,
+            take_open_paths,
             save_document,
             get_file_revision,
             read_recovery,
@@ -642,14 +601,32 @@ pub fn run() {
             extract_outline,
             validate_image,
             import_images,
-            read_plugin_package
+            read_image,
+            save_document_copy,
+            optional_file_revision,
+            export_zip,
+            read_plugin_package,
+            open_resource
         ])
         .setup(|app| {
-            let _ = app.path().app_config_dir();
+            let cwd = std::env::current_dir().unwrap_or_default();
+            queue_open_paths(
+                app.handle(),
+                std::env::args().skip(1).map(|path| cwd.join(path)),
+            );
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Markit");
+        .build(tauri::generate_context!())
+        .expect("error while building Markit")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                queue_open_paths(
+                    _app,
+                    urls.into_iter().filter_map(|url| url.to_file_path().ok()),
+                );
+            }
+        });
 }
 
 #[cfg(test)]
