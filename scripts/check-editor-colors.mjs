@@ -14,7 +14,11 @@ function contrast(foreground, background) {
 }
 
 async function colors(locator, pseudo = null) {
-  return locator.first().evaluate((element, pseudo) => {
+  return locator.first().evaluate(async (element, pseudo) => {
+    // Measure the settled palette after a theme or hover transition.
+    await Promise.all(element.getAnimations()
+      .filter(animation => animation instanceof CSSTransition)
+      .map(animation => animation.finished.catch(() => undefined)));
     const style = getComputedStyle(element, pseudo);
     let background = style.backgroundColor;
     for (let parent = element; /^(transparent|rgba\([^)]*, 0\))$/.test(background) && parent; parent = parent.parentElement) {
